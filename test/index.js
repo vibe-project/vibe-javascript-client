@@ -7,7 +7,7 @@
 var qunit = require("qunit");
 
 qunit.run({
-	deps: {path: __dirname + "/webapp/assets/helper.js", namespace: "helper"},
-	code: {path: __dirname + "/../react.js", namespace: "react"},
-	tests: [__dirname + "/webapp/unit/client.js", __dirname + "/webapp/unit/server.js"]
+    deps: {path: __dirname + "/webapp/assets/helper.js", namespace: "helper"},
+    code: {path: __dirname + "/../react.js", namespace: "react"},
+    tests: [__dirname + "/webapp/unit/client.js", __dirname + "/webapp/unit/server.js"]
 });
