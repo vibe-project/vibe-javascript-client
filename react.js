@@ -405,7 +405,6 @@
                     support.each(array, function(i, event) {
                         var latch, args = [event.type, event.data];
                         
-                        opts.lastEventId = event.id;
                         connection.lastEventIds.push(event.id);
                         if (event.reply) {
                             args.push({
@@ -435,14 +434,11 @@
                     var p = when === "open" ?
                             {
                                 transport: connection.transport,
-                                heartbeat: opts.heartbeat,
-                                lastEventId: opts.lastEventId
+                                heartbeat: opts.heartbeat
                             } :
                             when === "poll" ?
                             {
-                                transport: connection.transport,
-                                lastEventIds: connection.lastEventIds && connection.lastEventIds.join(","),
-                                /* deprecated */lastEventId: opts.lastEventId
+                                lastEventIds: connection.lastEventIds && connection.lastEventIds.join(",")
                             } :
                             {};
                     
@@ -1067,7 +1063,6 @@
         timeout: false,
         heartbeat: false,
         _heartbeat: 5000,
-        lastEventId: 0,
         sharing: false,
         prepare: function(connect) {
             connect();
@@ -1725,7 +1720,6 @@
         longpollajax: function(socket, options) {
             var xhr,
                 aborted,
-                // deprecated
                 count = 0;
             
             if (options.crossDomain && !support.corsable) {
@@ -1735,8 +1729,9 @@
             return support.extend(transports.httpbase(socket, options), {
                 open: function() {
                     function poll() {
-                        var url = socket.buildURL(!count ? "open" : "poll", {count: ++count});
+                        var url = socket.buildURL(!count ? "open" : "poll");
                         
+                        ++count;
                         socket.data("url", url);
                         
                         xhr = support.xhr();
@@ -1787,7 +1782,6 @@
         longpollxdr: function(socket, options) {
             var xdr,
                 aborted,
-                // deprecated
                 count = 0,
                 XDomainRequest = window.XDomainRequest;
             
@@ -1798,8 +1792,9 @@
             return support.extend(transports.httpbase(socket, options), {
                 open: function() {
                     function poll() {
-                        var url = options.xdrURL.call(socket, socket.buildURL(!count ? "open" : "poll", {count: ++count}));
+                        var url = options.xdrURL.call(socket, socket.buildURL(!count ? "open" : "poll"));
                         
+                        ++count;
                         socket.data("url", url);
                         
                         xdr = new XDomainRequest();
@@ -1842,7 +1837,6 @@
             var script,
                 called,
                 aborted,
-                // deprecated
                 count = 0,
                 callback = jsonpCallbacks.pop() || ("socket_" + (++guid));
             
@@ -1852,6 +1846,7 @@
                         var url = socket.buildURL(!count ? "open" : "poll", {callback: callback, count: ++count}),
                             head = document.head || document.getElementsByTagName("head")[0] || document.documentElement;
                         
+                        count++
                         socket.data("url", url);
                         
                         script = document.createElement("script");
