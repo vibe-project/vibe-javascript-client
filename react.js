@@ -1,6 +1,6 @@
 /*
- * React v1.1.1
- * http://atmosphere.github.io/react-js/
+ * React v3.0.0-Alpha1
+ * http://atmosphere.github.io/react/
  * 
  * Copyright 2011-2014, Donghwan Kim 
  * Licensed under the Apache License, Version 2.0
@@ -408,10 +408,18 @@
                         opts.lastEventId = event.id;
                         connection.lastEventIds.push(event.id);
                         if (event.reply) {
-                            args.push(function(result) {
-                                if (!latch) {
-                                    latch = true;
-                                    self.send("reply", {id: event.id, data: result});
+                            args.push({
+                                resolve: function(value) {
+                                    if (!latch) {
+                                        latch = true;
+                                        self.send("reply", {id: event.id, data: value, exception: false});
+                                    }
+                                },
+                                reject: function(reason) {
+                                    if (!latch) {
+                                        latch = true;
+                                        self.send("reply", {id: event.id, data: reason, exception: true});
+                                    }
                                 }
                             });
                         }
