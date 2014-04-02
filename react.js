@@ -1059,7 +1059,7 @@
     
     react.defaults = defaults = {
         // Socket options
-        transports: ["ws", "sse", "stream", "longpoll"],
+        transports: ["ws", "stream", "longpoll"],
         timeout: false,
         heartbeat: false,
         _heartbeat: 5000,
@@ -1484,7 +1484,11 @@
                 }
             };
         },
-        // Server-Sent Events
+        // Streaming facade
+        stream: function(socket) {
+            socket.data("candidates").unshift("sse", "streamxhr", "streamxdr", "streamiframe");
+        },
+        // Streaming - Server-Sent Events
         sse: function(socket, options) {
             var es,
                 EventSource = window.EventSource;
@@ -1515,10 +1519,6 @@
                     es.close();
                 }
             });
-        },
-        // Streaming facade
-        stream: function(socket) {
-            socket.data("candidates").unshift("streamxhr", "streamxdr", "streamiframe");
         },
         // Streaming - XMLHttpRequest
         streamxhr: function(socket, options) {
