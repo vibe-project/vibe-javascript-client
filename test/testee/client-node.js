@@ -11,6 +11,15 @@ http.createServer(function(req, res) {
     
     switch (urlObj.pathname) {
     case "/open":
+        // The following transports are not needed in Node.js
+        switch (params.transport) {
+        case "streamxhr": case "streamxdr": case "streamiframe":
+            params.transport = "sse";
+            break;
+        case "longpollxdr": case "longpolljsonp":
+            params.transport = "longpollajax";
+            break;
+        }
         react.open(params.uri, {
             transports: [params.transport], 
             heartbeat: +params.heartbeat || false, 
