@@ -1,33 +1,30 @@
 var url = require("url"),
     http = require("http"),
-    react = require("../../react"),
-    sockets = {};
+    react = require("../../react");
 
 http.globalAgent.maxSockets = Infinity;
 
 http.createServer(function(req, res) {
     var urlObj = url.parse(req.url, true);
-    var params = urlObj.query;
-    
-    switch (urlObj.pathname) {
-    case "/open":
+    if (urlObj.pathname === "/open") {
         // The following transports are not needed in Node.js
-        switch (params.transport) {
+        switch (urlObj.query.transport) {
         case "streamxhr": case "streamxdr": case "streamiframe":
-            params.transport = "sse";
+            urlObj.query.transport = "sse";
             break;
         case "longpollxdr": case "longpolljsonp":
-            params.transport = "longpollajax";
+            urlObj.query.transport = "longpollajax";
             break;
         }
-        react.open(params.uri, {
-            transports: [params.transport], 
-            heartbeat: +params.heartbeat || false, 
-            _heartbeat: +params._heartbeat || false, 
+        react.open(urlObj.query.uri, {
+            transports: [urlObj.query.transport], 
+            heartbeat: +urlObj.query.heartbeat || false, 
+            _heartbeat: +urlObj.query._heartbeat || false, 
             reconnect: false, 
-            notifyAbort: true})
-        .on("open", function() {
-            sockets[this.option("id")] = this;
+            notifyAbort: true
+        })
+        .on("abort", function() {
+            this.close();
         })
         .on("echo", function(data) {
             this.send("echo", data);
@@ -40,13 +37,6 @@ http.createServer(function(req, res) {
             }
         });
         res.end();
-        break;
-    case "/close":
-        sockets[params.id].close();
-        res.end();
-        break;
-    default:
-        break;
     }
 })
 .listen(9000);
