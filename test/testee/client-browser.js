@@ -21,9 +21,13 @@ http.createServer(function(req, res) {
     switch (urlObj.pathname) {
     // A kind of long polling used by the browser to listen to the server
     case "/listen":
+        res.setHeader("cache-control", "no-cache, no-store, must-revalidate");
+        res.setHeader("pragma", "no-cache");
+        res.setHeader("expires", "0");
         response = res;
         break;
     // Tell the browser to connect to the server
+    // It's called by the react server
     case "/open":
         targetAddr = urlObj.query.uri.replace("/react", "");
         urlObj.query.uri = "http://localhost:9000/react";

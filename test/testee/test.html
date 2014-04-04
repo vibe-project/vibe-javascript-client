@@ -44,7 +44,7 @@
                                 can = !!window.XDomainRequest;
                                 break;
                             case "streamxhr":
-                                can = (!react.support.browser.msie || (+react.support.browser.version.split(".") >= 10)) && 
+                                can = (!react.support.browser.msie || (+react.support.browser.version.split(".")[0] >= 10)) && 
                                         (!crossOrigin || react.support.corsable)
                                 break;
                             case "streamiframe":
@@ -108,7 +108,8 @@
                     poll();
                 }
             };
-            xhr.open("GET", "/listen");
+            // No cache
+            xhr.open("GET", "/listen?" + Math.random());
             xhr.send();
         }());
         </script>
