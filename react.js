@@ -383,16 +383,8 @@
                 },
                 // For internal use only
                 // fires events from the server
-                _fire: function(data, isChunk) {
+                _fire: function(data) {
                     var array;
-                    
-                    if (isChunk) {
-                        data = opts.streamParser.call(self, data);
-                        while (data.length) {
-                            self._fire(data.shift());
-                        }
-                        return this;
-                    }
                     
                     if (support.isBinary(data)) {
                         array = [{type: "message", data: data}];
@@ -1100,46 +1092,6 @@
             default:
                 return false;
             }
-        },
-        streamParser: function(chunk) {
-            // Chunks are formatted according to the event stream format
-            // http://www.w3.org/TR/eventsource/#event-stream-interpretation
-            var match, line, reol = /\r\n|[\r\n]/g, lines = [], data = this.data("data"), array = [], i = 0;
-            
-            // Strips off the left padding of the chunk
-            // the first chunk of some streaming transports and every chunk for Android browser 2 and 3 has padding
-            chunk = chunk.replace(/^\s+/g, "");
-            
-            // String.prototype.split is not reliable cross-browser
-            while (match = reol.exec(chunk)) {
-                lines.push(chunk.substring(i, match.index));
-                i = match.index + match[0].length;
-            }
-            lines.push(chunk.length === i ? "" : chunk.substring(i));
-            
-            if (!data) {
-                data = [];
-                this.data("data", data);
-            }
-            
-            // Processes the data field only
-            for (i = 0; i < lines.length; i++) {
-                line = lines[i];
-                if (!line) {
-                    // Finish
-                    array.push(data.join("\n"));
-                    data = [];
-                    this.data("data", data);
-                } else if (/^data:\s/.test(line)) {
-                    // A single data field
-                    data.push(line.substring("data: ".length));
-                } else {
-                    // A fragment of a data field
-                    data[data.length - 1] += line;
-                }
-            }
-            
-            return array;
         }
     };
     
@@ -1405,7 +1357,7 @@
                 }
             };
         },
-        // HTTP Support
+        // HTTP Base
         httpbase: function(socket, options) {
             var send,
                 sending,
@@ -1510,13 +1462,35 @@
                     };
                     es.onerror = function(event) {
                         es.close();
-                        
                         // There is no way to find whether this connection closed normally or not
                         socket.data("event", event).fire("close", "done");
                     };
                 },
                 close: function() {
                     es.close();
+                }
+            });
+        },
+        // Streaming Base
+        streambase: function(socket, options) {
+            var buffer = "";
+            return support.extend(transports.httpbase(socket, options), {
+                // The detail about parsing is explained in the reference implementation
+                parse: function(chunk) {
+                    // Strips off the left padding of the chunk that appears in the
+                    // first chunk and every chunk for Android browser 2 and 3
+                    chunk = chunk.replace(/^\s+/, "");
+                    // The chunk should be not empty for correct parsing, 
+                    if (chunk) {
+                        var i, 
+                            // String.prototype.split with string separator is reliable cross-browser
+                            lines = (buffer + chunk).split("\n\n");
+                        
+                        for (i = 0; i < lines.length - 1; i++) {
+                            socket._fire(lines[i].substring("data: ".length));
+                        }
+                        buffer = lines[lines.length - 1];
+                    }
                 }
             });
         },
@@ -1528,39 +1502,74 @@
                 return;
             }
             
-            return support.extend(transports.httpbase(socket, options), {
+            return support.extend(transports.streambase(socket, options), {
                 open: function() {
+                    var index, length, 
+                        self = this;
+                    
                     xhr = support.xhr();
                     xhr.onreadystatechange = function() {
-                        function onprogress() {
-                            var index = socket.data("index"),
-                                length = xhr.responseText.length;
-                            
-                            if (!index) {
-                                socket.fire("open")._fire(xhr.responseText, true);
-                            } else if (length > index) {
-                                socket._fire(xhr.responseText.substring(index, length), true);
-                            }
-                            
-                            socket.data("index", length);
-                        }
-                        
                         if (xhr.readyState === 3 && xhr.status === 200) {
-                            onprogress();
+                            length = xhr.responseText.length;
+                            if (!index) {
+                                socket.fire("open");
+                                self.parse(xhr.responseText);
+                            } else if (length > index) {
+                                self.parse(xhr.responseText.substring(index));
+                            }
+                            index = length;
                         } else if (xhr.readyState === 4) {
                             socket.fire("close", xhr.status === 200 ? "done" : "error");
                         }
                     };
-                    
                     xhr.open("GET", socket.data("url"));
                     if (support.corsable) {
                         xhr.withCredentials = options.credentials;
                     }
-                    
                     xhr.send(null);
                 },
                 close: function() {
                     xhr.abort();
+                }
+            });
+        },
+        // Streaming - XDomainRequest
+        streamxdr: function(socket, options) {
+            var xdr,
+                XDomainRequest = window.XDomainRequest;
+            
+            if (!XDomainRequest || !options.xdrURL || !options.xdrURL.call(socket, "t")) {
+                return;
+            }
+            
+            return support.extend(transports.streambase(socket, options), {
+                open: function() {
+                    var index, length, 
+                        self = this, url = options.xdrURL.call(socket, socket.data("url"));
+                    
+                    socket.data("url", url);
+                    xdr = new XDomainRequest();
+                    xdr.onprogress = function() {
+                        length = xdr.responseText.length;
+                        if (!index) {
+                            socket.fire("open");
+                            self.parse(xdr.responseText);
+                        } else {
+                            self.parse(xdr.responseText.substring(index));
+                        }
+                        index = length;
+                    };
+                    xdr.onerror = function() {
+                        socket.fire("close", "error");
+                    };
+                    xdr.onload = function() {
+                        socket.fire("close", "done");
+                    };
+                    xdr.open("GET", url);
+                    xdr.send();
+                },
+                close: function() {
+                    xdr.abort();
                 }
             });
         },
@@ -1581,13 +1590,13 @@
                 }
             }
             
-            return support.extend(transports.httpbase(socket, options), {
+            return support.extend(transports.streambase(socket, options), {
                 open: function() {
-                    var iframe, cdoc;
+                    var iframe, cdoc,
+                        self = this;
                     
                     function iterate(fn) {
                         var timeoutId;
-                        
                         // Though the interval is 1ms for real-time application, there is a delay between setTimeout calls
                         // For detail, see https://developer.mozilla.org/en/window.setTimeout#Minimum_delay_and_timeout_nesting
                         (function loop() {
@@ -1595,11 +1604,9 @@
                                 if (fn() === false) {
                                     return;
                                 }
-                                
                                 loop();
                             }, 1);
                         })();
-                        
                         return function() {
                             clearTimeout(timeoutId);
                         };
@@ -1608,11 +1615,9 @@
                     doc = new ActiveXObject("htmlfile");
                     doc.open();
                     doc.close();
-                    
                     iframe = doc.createElement("iframe");
                     iframe.src = socket.data("url");
                     doc.body.appendChild(iframe);
-                    
                     cdoc = iframe.contentDocument || iframe.contentWindow.document;
                     stop = iterate(function() {
                         // Response container
@@ -1621,12 +1626,12 @@
                         function readDirty() {
                             var text,
                                 clone = container.cloneNode(true);
-                            
                             // Adds a character not CR and LF to circumvent an Internet Explorer bug
                             // If the contents of an element ends with one or more CR or LF, Internet Explorer ignores them in the innerText property
                             clone.appendChild(cdoc.createTextNode("."));
-                            text = clone.innerText;
-                            
+                            // But the above idea causes \n chars to be replaced with \r\n or for some reason
+                            // Restores them to its original state
+                            text = clone.innerText.replace(/\r\n/g, "\n");
                             return text.substring(0, text.length - 1);
                         }
                         
@@ -1634,81 +1639,33 @@
                         if (!cdoc.firstChild) {
                             return;
                         }
-                        
                         container = cdoc.body.lastChild;
-                        
                         // Detects connection failure
                         if (!container) {
                             socket.fire("close", "error");
                             return false;
                         }
-                        
-                        socket.fire("open")._fire(readDirty(), true);
+                        socket.fire("open");
+                        self.parse(readDirty());
+                        // The container is resetable so no index or length variable is needed
                         container.innerText = "";
-                        
                         stop = iterate(function() {
                             var text = readDirty();
-                            
                             if (text) {
                                 container.innerText = "";
-                                socket._fire(text, true);
+                                self.parse(text);
                             }
-                            
                             if (cdoc.readyState === "complete") {
                                 socket.fire("close", "done");
                                 return false;
                             }
                         });
-                        
                         return false;
                     });
                 },
                 close: function() {
                     stop();
                     doc.execCommand("Stop");
-                }
-            });
-        },
-        // Streaming - XDomainRequest
-        streamxdr: function(socket, options) {
-            var xdr,
-                XDomainRequest = window.XDomainRequest;
-            
-            if (!XDomainRequest || !options.xdrURL || !options.xdrURL.call(socket, "t")) {
-                return;
-            }
-            
-            return support.extend(transports.httpbase(socket, options), {
-                open: function() {
-                    var url = options.xdrURL.call(socket, socket.data("url"));
-                    
-                    socket.data("url", url);
-                    
-                    xdr = new XDomainRequest();
-                    xdr.onprogress = function() {
-                        var index = socket.data("index"),
-                            length = xdr.responseText.length;
-                        
-                        if (!index) {
-                            socket.fire("open")._fire(xdr.responseText, true);
-                        } else {
-                            socket._fire(xdr.responseText.substring(index, length), true);
-                        }
-                        
-                        socket.data("index", length);
-                    };
-                    xdr.onerror = function() {
-                        socket.fire("close", "error");
-                    };
-                    xdr.onload = function() {
-                        socket.fire("close", "done");
-                    };
-                    
-                    xdr.open("GET", url);
-                    xdr.send();
-                },
-                close: function() {
-                    xdr.abort();
                 }
             });
         },
@@ -1731,7 +1688,7 @@
                     function poll() {
                         var url = socket.buildURL(!count ? "open" : "poll");
                         
-                        ++count;
+                        count++;
                         socket.data("url", url);
                         
                         xhr = support.xhr();
@@ -1794,7 +1751,7 @@
                     function poll() {
                         var url = options.xdrURL.call(socket, socket.buildURL(!count ? "open" : "poll"));
                         
-                        ++count;
+                        count++;
                         socket.data("url", url);
                         
                         xdr = new XDomainRequest();
@@ -1846,7 +1803,7 @@
                         var url = socket.buildURL(!count ? "open" : "poll", {callback: callback, count: ++count}),
                             head = document.head || document.getElementsByTagName("head")[0] || document.documentElement;
                         
-                        count++
+                        count++;
                         socket.data("url", url);
                         
                         script = document.createElement("script");
