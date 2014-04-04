@@ -36,7 +36,7 @@ http.createServer(function(req, res) {
         break;
     // Static assets
     case "/react.js":
-        res.setHeader("content-type", "text/javascript");
+        res.setHeader("content-type", "text/javascript; utf-8");
         fs.readFile(__dirname + "../../../react.js", function(err, data) {
             if (err) {
                 throw err;
@@ -45,7 +45,7 @@ http.createServer(function(req, res) {
         });
         break;
     case "/test.html":
-        res.setHeader("content-type", "text/html");
+        res.setHeader("content-type", "text/html; utf-8");
         fs.readFile(__dirname + "/test.html", function(err, data) {
             if (err) {
                 throw err;
