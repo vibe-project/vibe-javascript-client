@@ -33,6 +33,7 @@
     "eventsource": "0.1.0"
   },
   "devDependencies": {
+    "http-proxy": "1.0.3",
     "mocha": "1.18.2",
     "chai": "1.9.1"
   }

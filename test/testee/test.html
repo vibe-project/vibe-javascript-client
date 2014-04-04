@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="utf-8" />
+        <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>React Test Suite</title>
+    </head>
+    <body>
+        <script type="text/javascript" src="react.js"></script>
+        <script type="text/javascript">
+        var socket,
+        	crossOrigin = location.search === "?crossorigin";
+        
+        // A vanilla form of long polling
+        (function poll() {
+            var xhr = react.support.xhr();
+            xhr.onreadystatechange = function() {
+                if (xhr.readyState === 4 && xhr.status === 200) {
+                    // As a new test begins, close a previous connection
+                    if (socket) {
+                        socket.close();
+                    }
+                    
+                    var params = react.support.parseJSON(xhr.responseText);
+                    
+                    if (!crossOrigin) {
+                        params.uri = "/react";
+                    }
+                    // If the given transport is not supported, 
+                    // find a fallback transport in a group where it belongs first and 
+                    // if not exists find it in other groups in order of ws, stream, longpoll
+                    params.transport = (function find(transport) {
+                        function able(transport) {
+                            var can;
+                            switch (transport) {
+                            case "ws":
+                                can = !!window.WebSocket;
+                                break;
+                            case "sse":
+                                can = !!window.EventSource;
+                                break;
+                            case "streamxdr":
+                                can = !!window.XDomainRequest;
+                                break;
+                            case "streamxhr":
+                                can = (!react.support.browser.msie || (+react.support.browser.version.split(".") >= 10)) && 
+                                        (!crossOrigin || react.support.corsable)
+                                break;
+                            case "streamiframe":
+                                if (window.ActiveXObject && !crossOrigin) {
+                                    try {
+                                        can = !!new ActiveXObject("htmlfile");
+                                    } catch (e) {}
+                                }
+                                break;
+                            case "longpollajax":
+                                can = !crossOrigin || react.support.corsable;
+                                break;
+                            case "longpollxdr":
+                                can = !!window.XDomainRequest;
+                                break;
+                            case "longpolljsonp":
+                                can = true;
+                                break;
+                            }
+                            return can ? transport : false;
+                        }
+                        
+                        switch (transport) {
+                        case "ws":
+                            return able("ws") || find("stream");
+                        case "stream":
+                            return able("sse") || able("streamxhr") || able("streamxdr") || able("streamiframe") || find("longpoll");
+                        case "sse": case "streamxhr": case "streamxdr": case "streamiframe":
+                            return able(transport) || find("stream");
+                        case "longpoll":
+                            return able("longpollajax") || able("longpollxdr") || able("longpolljsonp");
+                        case "longpollajax": case "longpollxdr": case "longpolljsonp":
+                            return able(transport) || find("longpoll");
+                        }
+                    })(params.transport);
+                    
+                    socket = react.open(params.uri, {
+                        transports: [params.transport], 
+                        heartbeat: +params.heartbeat || false, 
+                        _heartbeat: +params._heartbeat || false, 
+                        reconnect: false, 
+                        notifyAbort: true,
+                        xdrURL: function(url) {
+                            return url;
+                        }
+                    })
+                    .on("abort", function() {
+                        this.close();
+                    })
+                    .on("echo", function(data) {
+                        this.send("echo", data);
+                    })
+                    .on("reaction", function(bool, reply) {
+                        if (bool) {
+                            reply.resolve(bool);
+                        } else {
+                            reply.reject(bool);
+                        }
+                    });
+                    // Continue a long polling
+                    poll();
+                }
+            };
+            xhr.open("GET", "/listen");
+            xhr.send();
+        }());
+        </script>
+    </body>
+</html>
