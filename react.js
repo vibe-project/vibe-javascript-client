@@ -268,9 +268,7 @@
                         };
                     
                     // Cancels the scheduled connection
-                    if (reconnectTimer) {
-                        clearTimeout(reconnectTimer);
-                    }
+                    clearTimeout(reconnectTimer);
                     
                     // Resets the connection scope and event helpers
                     connection = {};
@@ -336,39 +334,11 @@
                 },
                 // Disconnects the connection
                 close: function() {
-                    var script, head;
-                    
                     // Prevents reconnection
                     opts.reconnect = false;
-                    if (reconnectTimer) {
-                        clearTimeout(reconnectTimer);
-                    }
-                    
-                    // Fires the close event immediately for transport which doesn't give feedback on disconnection
-                    if (unloading || !transport || !transport.feedback) {
-                        self.fire("close", unloading ? "error" : "aborted");
-                        if (opts.notifyAbort && connection.transport !== "session") {
-                            head = document.head || document.getElementsByTagName("head")[0] || document.documentElement;
-                            script = document.createElement("script");
-                            script.async = false;
-                            script.src = self.buildURL("abort");
-                            script.onload = script.onreadystatechange = function() {
-                                if (!script.readyState || /loaded|complete/.test(script.readyState)) {
-                                    script.onload = script.onreadystatechange = null;
-                                    if (script.parentNode) {
-                                        script.parentNode.removeChild(script);
-                                    }
-                                }
-                            };
-                            head.insertBefore(script, head.firstChild);
-                        }
-                    }
-                    
+                    clearTimeout(reconnectTimer);
                     // Delegates to the transport
-                    if (transport) {
-                        transport.close();
-                    }
-                    
+                    transport.close();
                     return this;
                 },
                 // Broadcasts event to session sockets
@@ -1078,7 +1048,6 @@
         
         // Transport options
         credentials: false,
-        notifyAbort: false,
         xdrURL: function(url) {
             // Maintaining session by rewriting URL
             // http://stackoverflow.com/questions/6453779/maintaining-session-by-rewriting-url
@@ -1327,7 +1296,6 @@
             }
             
             return {
-                feedback: true,
                 open: function() {
                     // Makes an absolute url whose scheme is ws or wss
                     var url = support.getAbsoluteURL(socket.data("url")).replace(/^http/, "ws");
@@ -1376,24 +1344,20 @@
             send = !options.crossDomain || support.corsable ?
             function(url, data) {
                 var xhr = support.xhr();
-                
                 xhr.onreadystatechange = function() {
                     if (xhr.readyState === 4) {
                         post();
                     }
                 };
-                
                 xhr.open("POST", url);
                 xhr.setRequestHeader("Content-Type", "text/plain; charset=UTF-8");
                 if (support.corsable) {
                     xhr.withCredentials = options.credentials;
                 }
-                
                 xhr.send("data=" + data);
             } : window.XDomainRequest && options.xdrURL && options.xdrURL.call(socket, "t") ?
             function(url, data) {
                 var xdr = new window.XDomainRequest();
-                
                 xdr.onload = xdr.onerror = post;
                 xdr.open("POST", options.xdrURL.call(socket, url));
                 xdr.send("data=" + data);
@@ -1402,7 +1366,6 @@
                 var iframe,
                     textarea,
                     form = document.createElement("form");
-                
                 form.action = url;
                 form.target = "socket-" + (++guid);
                 form.method = "POST";
@@ -1411,16 +1374,13 @@
                 form.acceptCharset = "UTF-8";
                 form.style.display = "none";
                 form.innerHTML = '<textarea name="data"></textarea><iframe name="' + form.target + '"></iframe>';
-                
                 textarea = form.firstChild;
                 textarea.value = data;
-                
                 iframe = form.lastChild;
                 support.on(iframe, "load", function() {
                     document.body.removeChild(form);
                     post();
                 });
-                
                 document.body.appendChild(form);
                 form.submit();
             };
@@ -1428,11 +1388,32 @@
             return {
                 send: function(data) {
                     queue.push(data);
-                    
                     if (!sending) {
                         sending = true;
                         post();
                     }
+                },
+                close: function() {
+                    // Fires the close event immediately
+                    // unloading variable prevents those who use this connection from being aborted
+                    socket.fire("close", unloading ? "error" : "aborted");
+                    // Aborts the real connection
+                    this.abort();
+                    // Sends the abort request to the server
+                    // this request is supposed to run in unloading event so script tag should be used
+                    var script = document.createElement("script"),
+                        head = document.head || document.getElementsByTagName("head")[0] || document.documentElement;
+                    script.async = false;
+                    script.src = socket.buildURL("abort");
+                    script.onload = script.onreadystatechange = function() {
+                        if (!script.readyState || /loaded|complete/.test(script.readyState)) {
+                            script.onload = script.onreadystatechange = null;
+                            if (script.parentNode) {
+                                script.parentNode.removeChild(script);
+                            }
+                        }
+                    };
+                    head.insertBefore(script, head.firstChild);
                 }
             };
         },
@@ -1466,7 +1447,7 @@
                         socket.data("event", event).fire("close", "done");
                     };
                 },
-                close: function() {
+                abort: function() {
                     es.close();
                 }
             });
@@ -1528,7 +1509,7 @@
                     }
                     xhr.send(null);
                 },
-                close: function() {
+                abort: function() {
                     xhr.abort();
                 }
             });
@@ -1568,7 +1549,7 @@
                     xdr.open("GET", url);
                     xdr.send();
                 },
-                close: function() {
+                abort: function() {
                     xdr.abort();
                 }
             });
@@ -1663,7 +1644,7 @@
                         return false;
                     });
                 },
-                close: function() {
+                abort: function() {
                     stop();
                     doc.execCommand("Stop");
                 }
@@ -1729,7 +1710,7 @@
                     
                     poll();
                 },
-                close: function() {
+                abort: function() {
                     aborted = true;
                     xhr.abort();
                 }
@@ -1783,7 +1764,7 @@
                     
                     poll();
                 },
-                close: function() {
+                abort: function() {
                     aborted = true;
                     xdr.abort();
                 }
@@ -1859,7 +1840,7 @@
                     
                     poll();
                 },
-                close: function() {
+                abort: function() {
                     aborted = true;
                     if (script.clean) {
                         script.clean();
