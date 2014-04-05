@@ -1020,7 +1020,6 @@
     })(window.navigator.userAgent.toLowerCase());
     
     react.defaults = defaults = {
-        // Socket options
         transports: ["ws", "stream", "longpoll"],
         timeout: false,
         heartbeat: false,
@@ -1045,22 +1044,9 @@
         },
         inbound: support.parseJSON,
         outbound: support.stringifyJSON,
-        
-        // Transport options
-        xdrURL: function(url) {
-            // Maintaining session by rewriting URL
-            // http://stackoverflow.com/questions/6453779/maintaining-session-by-rewriting-url
-            var match = /(?:^|; )(JSESSIONID|PHPSESSID)=([^;]*)/.exec(document.cookie);
-            
-            switch (match && match[1]) {
-            case "JSESSIONID":
-                return url.replace(/;jsessionid=[^\?]*|(\?)|$/, ";jsessionid=" + match[2] + "$1");
-            case "PHPSESSID":
-                return url.replace(/\?PHPSESSID=[^&]*&?|\?|$/, "?PHPSESSID=" + match[2] + "&").replace(/&$/, "");
-            default:
-                return false;
-            }
-        }
+        // See the fifth at http://blogs.msdn.com/b/ieinternals/archive/2010/05/13/xdomainrequest-restrictions-limitations-and-workarounds.aspx
+        // and http://stackoverflow.com/questions/6453779/maintaining-session-by-rewriting-url
+        // xdrURL: function(url) {return url_with_credentials}
     };
     
     react.transports = transports = {
@@ -1354,7 +1340,7 @@
                     xhr.withCredentials = true;
                 }
                 xhr.send("data=" + data);
-            } : window.XDomainRequest && options.xdrURL && options.xdrURL.call(socket, "t") ?
+            } : window.XDomainRequest && options.xdrURL ?
             function(url, data) {
                 var xdr = new window.XDomainRequest();
                 xdr.onload = xdr.onerror = post;
@@ -1518,7 +1504,7 @@
             var xdr,
                 XDomainRequest = window.XDomainRequest;
             
-            if (!XDomainRequest || !options.xdrURL || !options.xdrURL.call(socket, "t")) {
+            if (!XDomainRequest || !options.xdrURL) {
                 return;
             }
             
@@ -1722,7 +1708,7 @@
                 count = 0,
                 XDomainRequest = window.XDomainRequest;
             
-            if (!XDomainRequest || !options.xdrURL || !options.xdrURL.call(socket, "t")) {
+            if (!XDomainRequest || !options.xdrURL) {
                 return;
             }
             
