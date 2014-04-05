@@ -341,16 +341,6 @@
                     transport.close();
                     return this;
                 },
-                // Broadcasts event to session sockets
-                broadcast: function(type, data) {
-                    // TODO rename
-                    var broadcastable = connection.broadcastable;
-                    if (broadcastable) {
-                        broadcastable.broadcast({type: "fire", data: {type: type, data: data}});
-                    }
-                    
-                    return this;
-                },
                 // For internal use only
                 // fires events from the server
                 _fire: function(data) {
@@ -599,9 +589,6 @@
                     // Chooses a server
                     server = servers.storage() || servers.windowref();
                     server.init();
-                    
-                    // For broadcast method
-                    connection.broadcastable = server;
                     
                     // List of children sockets
                     server.set("children", []);
@@ -1214,9 +1201,6 @@
             if (!connector) {
                 return;
             }
-            
-            // For broadcast method
-            socket.data("broadcastable", connector);
             
             return {
                 open: function() {
