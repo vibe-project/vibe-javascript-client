@@ -1030,7 +1030,7 @@
             return url + (/\?/.test(url) ? "&" : "?") + "when=" + when + "&" + support.param(params);
         },
         inbound: support.parseJSON,
-        outbound: support.stringifyJSON,
+        outbound: support.stringifyJSON
         // See the fifth at http://blogs.msdn.com/b/ieinternals/archive/2010/05/13/xdomainrequest-restrictions-limitations-and-workarounds.aspx
         // and http://stackoverflow.com/questions/6453779/maintaining-session-by-rewriting-url
         // xdrURL: function(url) {return url_with_credentials}
