@@ -1047,7 +1047,6 @@
         outbound: support.stringifyJSON,
         
         // Transport options
-        credentials: false,
         xdrURL: function(url) {
             // Maintaining session by rewriting URL
             // http://stackoverflow.com/questions/6453779/maintaining-session-by-rewriting-url
@@ -1352,7 +1351,7 @@
                 xhr.open("POST", url);
                 xhr.setRequestHeader("Content-Type", "text/plain; charset=UTF-8");
                 if (support.corsable) {
-                    xhr.withCredentials = options.credentials;
+                    xhr.withCredentials = true;
                 }
                 xhr.send("data=" + data);
             } : window.XDomainRequest && options.xdrURL && options.xdrURL.call(socket, "t") ?
@@ -1434,7 +1433,7 @@
                 open: function() {
                     var url = socket.data("url");
                     
-                    es = new EventSource(url, {withCredentials: options.credentials});
+                    es = new EventSource(url, {withCredentials: true});
                     es.onopen = function(event) {
                         socket.data("event", event).fire("open");
                     };
@@ -1505,7 +1504,7 @@
                     };
                     xhr.open("GET", socket.data("url"));
                     if (support.corsable) {
-                        xhr.withCredentials = options.credentials;
+                        xhr.withCredentials = true;
                     }
                     xhr.send(null);
                 },
@@ -1702,7 +1701,7 @@
                         
                         xhr.open("GET", url);
                         if (support.corsable) {
-                            xhr.withCredentials = options.credentials;
+                            xhr.withCredentials = true;
                         }
                         
                         xhr.send(null);
