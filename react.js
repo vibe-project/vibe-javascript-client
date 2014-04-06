@@ -231,53 +231,17 @@
                 },
                 // Establishes a connection
                 open: function() {
-                    var type,
-                        latch,
-                        connect = function() {
-                            var candidates, type;
-                            
-                            if (!latch) {
-                                latch = true;
-                                candidates = connection.candidates = slice.call(opts.transports);
-                                while (!transport && candidates.length) {
-                                    type = candidates.shift();
-                                    connection.transport = type;
-                                    transport = transports[type](self, opts);
-                                }
-                                
-                                // Increases the number of reconnection attempts
-                                if (reconnectTry) {
-                                    reconnectTry++;
-                                }
-                                
-                                // Fires the connecting event and connects
-                                if (transport) {
-                                    self.fire("connecting");
-                                    transport.open();
-                                } else {
-                                    self.fire("close", "notransport");
-                                }
-                            }
-                        },
-                        cancel = function() {
-                            if (!latch) {
-                                latch = true;
-                                self.fire("close", "canceled");
-                            }
-                        };
+                    var type, candidates;
                     
                     // Cancels the scheduled connection
                     clearTimeout(reconnectTimer);
-                    
                     // Resets the connection scope and event helpers
                     connection = {};
                     for (type in events) {
                         events[type].unlock();
                     }
-                    
                     // Chooses transport
                     transport = undefined;
-                    
                     // From null or waiting state
                     state = "preparing";
                     
@@ -285,15 +249,35 @@
                     if (opts.sharing) {
                         connection.transport = "session";
                         transport = transports.session(self, opts);
-                    }
-                    
-                    // Executes the prepare handler if a physical connection is needed
-                    if (transport) {
-                        connect();
                     } else {
-                        opts.prepare.call(self, connect, cancel, opts);
+                        candidates = slice.call(opts.transports);
+                        while (!transport && candidates.length) {
+                            connection.transport = type = candidates.shift();
+                            switch (type) {
+                            case "stream":
+                                candidates.unshift("sse", "streamxhr", "streamxdr", "streamiframe");
+                                break;
+                            case "longpoll":
+                                candidates.unshift("longpollajax", "longpollxdr", "longpolljsonp");
+                                break;
+                            default:
+                                // A transport instance will be null if it can't run on this environment
+                                transport = transports[type](self, opts);
+                                break;
+                            }
+                        }
+                        // Increases the number of reconnection attempts
+                        if (reconnectTry) {
+                            reconnectTry++;
+                        }
+                        // Fires the connecting event and connects
+                        if (transport) {
+                            self.fire("connecting");
+                            transport.open();
+                        } else {
+                            self.fire("close", "notransport");
+                        }
                     }
-                    
                     return this;
                 },
                 // Sends an event to the server via the connection
@@ -994,9 +978,6 @@
         heartbeat: false,
         _heartbeat: 5000,
         sharing: false,
-        prepare: function(connect) {
-            connect();
-        },
         reconnect: function(lastDelay) {
             return 2 * (lastDelay || 250);
         },
@@ -1357,10 +1338,6 @@
             };
             return transport;
         },
-        // Streaming facade
-        stream: function(socket) {
-            socket.data("candidates").unshift("sse", "streamxhr", "streamxdr", "streamiframe");
-        },
         // Streaming - Server-Sent Events
         sse: function(socket, options) {
             var es,
@@ -1595,10 +1572,6 @@
             };
             return transport;
         },
-        // Long polling facade
-        longpoll: function(socket) {
-            socket.data("candidates").unshift("longpollajax", "longpollxdr", "longpolljsonp");
-        },
         // Long polling Base
         longpollbase: function(socket, options) {
             var transport = transports.httpbase(socket, options);
@@ -1769,7 +1742,7 @@
                 if (script.clean) {
                     script.clean();
                 }
-            }
+            };
             return transport;
         }
     };
