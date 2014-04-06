@@ -327,7 +327,9 @@
                     }
                     
                     // Delegates to the transport
-                    transport.send(support.isBinary(data) ? data : opts.outbound.call(self, event));
+                    transport.send(support.isBinary(data) || connection.transport === "session" ? 
+                        data : 
+                        support.stringifyJSON(event));
                     
                     return this;
                 },
@@ -348,7 +350,7 @@
                     if (support.isBinary(data)) {
                         event = {type: "message", data: data};
                     } else {
-                        event = opts.inbound.call(self, data);
+                        event = support.parseJSON(data);
                     }
                     
                     args = [event.type, event.data];
@@ -1005,9 +1007,7 @@
                 var r = Math.random() * 16 | 0, v = c === "x" ? r : (r & 0x3 | 0x8);
                 return v.toString(16);
             });
-        },
-        inbound: support.parseJSON,
-        outbound: support.stringifyJSON
+        }
         // See the fifth at http://blogs.msdn.com/b/ieinternals/archive/2010/05/13/xdomainrequest-restrictions-limitations-and-workarounds.aspx
         // and http://stackoverflow.com/questions/6453779/maintaining-session-by-rewriting-url
         // xdrURL: function(url) {return url_with_credentials}
@@ -1184,14 +1184,10 @@
                     var traceTimer,
                         parentOpened,
                         timeout = options.timeout,
-                        heartbeat = options.heartbeat,
-                        outbound = options.outbound;
+                        heartbeat = options.heartbeat;
                     
                     // Prevents side effects
                     options.timeout = options.heartbeat = false;
-                    options.outbound = function(arg) {
-                        return arg;
-                    };
                     
                     // Checks the shared one is alive
                     traceTimer = setInterval(function() {
@@ -1209,7 +1205,6 @@
                         clearInterval(traceTimer);
                         options.timeout = timeout;
                         options.heartbeat = heartbeat;
-                        options.outbound = outbound;
                     });
                     
                     parentOpened = connector.init();
@@ -1609,7 +1604,7 @@
             var transport = transports.httpbase(socket, options);
             transport.parse = function(data) {
                 var eventIds = [], 
-                    obj = options.inbound.call(socket, data), 
+                    obj = support.parseJSON(data), 
                     array = !support.isArray(obj) ? [obj] : obj;
                 
                 support.each(array, function(i, event) {
@@ -1617,8 +1612,7 @@
                 });
                 this.connect({id: options.id, when: "poll", lastEventIds: eventIds.join(",")});
                 support.each(array, function(i, event) {
-                    // TODO wrong use case of outbound option
-                    socket._fire(options.outbound.call(socket, event));
+                    socket._fire(support.stringifyJSON(event));
                 });
             };
             return transport;
