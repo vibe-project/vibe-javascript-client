@@ -242,7 +242,6 @@
                                 while (!transport && candidates.length) {
                                     type = candidates.shift();
                                     connection.transport = type;
-                                    connection.url = self.buildURL("open");
                                     transport = transports[type](self, opts);
                                 }
                                 
@@ -372,19 +371,6 @@
                     
                     self.fire.apply(self, args).fire("_message", args);
                     return this;
-                },
-                // For internal use only
-                // builds an effective URL
-                buildURL: function(when, params) {
-                    var p = when === "open" ?
-                            {
-                                transport: connection.transport,
-                                heartbeat: opts.heartbeat
-                            } : 
-                            {};
-                    
-                    support.extend(p, {id: opts.id, _: guid++}, opts.params && opts.params[when], params);
-                    return opts.urlBuilder.call(self, url, p, when);
                 }
             };
         
@@ -850,6 +836,11 @@
             
             return s.join("&").replace(/%20/g, "+");
         },
+        url: function(url, params) {
+            params = params || {};
+            params._ = guid++;
+            return url + (/\?/.test(url) ? "&" : "?") + support.param(params);
+        },
         xhr: function() {
             try {
                 return new window.XMLHttpRequest();
@@ -1014,9 +1005,6 @@
                 var r = Math.random() * 16 | 0, v = c === "x" ? r : (r & 0x3 | 0x8);
                 return v.toString(16);
             });
-        },
-        urlBuilder: function(url, params, when) {
-            return url + (/\?/.test(url) ? "&" : "?") + "when=" + when + "&" + support.param(params);
         },
         inbound: support.parseJSON,
         outbound: support.stringifyJSON
@@ -1244,50 +1232,50 @@
             };
         },
         // WebSocket
-        ws: function(socket) {
+        ws: function(socket, options) {
             var ws,
                 aborted,
-                WebSocket = window.WebSocket;
+                WebSocket = window.WebSocket,
+                transport = {};
             
             if (!WebSocket) {
                 return;
             }
             
-            return {
-                open: function() {
-                    // Makes an absolute url whose scheme is ws or wss
-                    var url = support.getAbsoluteURL(socket.data("url")).replace(/^http/, "ws");
-                    
-                    socket.data("url", url);
-                    
-                    ws = new WebSocket(url);
-                    ws.onopen = function(event) {
-                        socket.data("event", event).fire("open");
-                    };
-                    ws.onmessage = function(event) {
-                        socket.data("event", event)._fire(event.data);
-                    };
-                    ws.onerror = function(event) {
-                        socket.data("event", event).fire("close", aborted ? "aborted" : "error");
-                    };
-                    ws.onclose = function(event) {
-                        socket.data("event", event).fire("close", aborted ? "aborted" : event.wasClean ? "done" : "error");
-                    };
-                },
-                send: function(data) {
-                    ws.send(data);
-                },
-                close: function() {
-                    aborted = true;
-                    ws.close();
-                }
+            transport.open = function() {
+                // Changes options.url's protocol part to ws or wss
+                // options.url is absolute path
+                var url = support.url(options.url, {id: options.id, when: "open", transport: "ws", heartbeat: options.heartbeat}).replace(/^http/, "ws");
+                
+                ws = new WebSocket(url);
+                ws.onopen = function(event) {
+                    socket.data("event", event).fire("open");
+                };
+                ws.onmessage = function(event) {
+                    socket.data("event", event)._fire(event.data);
+                };
+                ws.onerror = function(event) {
+                    socket.data("event", event).fire("close", aborted ? "aborted" : "error");
+                };
+                ws.onclose = function(event) {
+                    socket.data("event", event).fire("close", aborted ? "aborted" : event.wasClean ? "done" : "error");
+                };
             };
+            transport.send = function(data) {
+                ws.send(data);
+            };
+            transport.close = function() {
+                aborted = true;
+                ws.close();
+            };
+            return transport;
         },
         // HTTP Base
         httpbase: function(socket, options) {
             var send,
                 sending,
-                queue = [];
+                queue = [],
+                transport = {};
             
             function post() {
                 if (queue.length) {
@@ -1343,37 +1331,36 @@
                 form.submit();
             };
             
-            return {
-                send: function(data) {
-                    queue.push(data);
-                    if (!sending) {
-                        sending = true;
-                        post();
-                    }
-                },
-                close: function() {
-                    // Fires the close event immediately
-                    // unloading variable prevents those who use this connection from being aborted
-                    socket.fire("close", unloading ? "error" : "aborted");
-                    // Aborts the real connection
-                    this.abort();
-                    // Sends the abort request to the server
-                    // this request is supposed to run in unloading event so script tag should be used
-                    var script = document.createElement("script"),
-                        head = document.head || document.getElementsByTagName("head")[0] || document.documentElement;
-                    script.async = false;
-                    script.src = socket.buildURL("abort");
-                    script.onload = script.onreadystatechange = function() {
-                        if (!script.readyState || /loaded|complete/.test(script.readyState)) {
-                            script.onload = script.onreadystatechange = null;
-                            if (script.parentNode) {
-                                script.parentNode.removeChild(script);
-                            }
-                        }
-                    };
-                    head.insertBefore(script, head.firstChild);
+            transport.send = function(data) {
+                queue.push(data);
+                if (!sending) {
+                    sending = true;
+                    post();
                 }
             };
+            transport.close = function() {
+                // Fires the close event immediately
+                // unloading variable prevents those who use this connection from being aborted
+                socket.fire("close", unloading ? "error" : "aborted");
+                // Aborts the real connection
+                this.abort();
+                // Sends the abort request to the server
+                // this request is supposed to run in unloading event so script tag should be used
+                var script = document.createElement("script"),
+                    head = document.head || document.getElementsByTagName("head")[0] || document.documentElement;
+                script.async = false;
+                script.src = support.url(options.url, {id: options.id, when: "abort"});
+                script.onload = script.onreadystatechange = function() {
+                    if (!script.readyState || /loaded|complete/.test(script.readyState)) {
+                        script.onload = script.onreadystatechange = null;
+                        if (script.parentNode) {
+                            script.parentNode.removeChild(script);
+                        }
+                    }
+                };
+                head.insertBefore(script, head.firstChild);
+            };
+            return transport;
         },
         // Streaming facade
         stream: function(socket) {
@@ -1382,141 +1369,146 @@
         // Streaming - Server-Sent Events
         sse: function(socket, options) {
             var es,
-                EventSource = window.EventSource;
+                EventSource = window.EventSource,
+                transport = transports.httpbase(socket, options);
             
             if (!EventSource) {
                 return;
             }
             
-            return support.extend(transports.httpbase(socket, options), {
-                open: function() {
-                    var url = socket.data("url");
-                    
-                    es = new EventSource(url, {withCredentials: true});
-                    es.onopen = function(event) {
-                        socket.data("event", event).fire("open");
-                    };
-                    es.onmessage = function(event) {
-                        socket.data("event", event)._fire(event.data);
-                    };
-                    es.onerror = function(event) {
-                        es.close();
-                        // There is no way to find whether this connection closed normally or not
-                        socket.data("event", event).fire("close", "done");
-                    };
-                },
-                abort: function() {
+            transport.open = function() {
+                var url = support.url(options.url, {id: options.id, when: "open", transport: "sse", heartbeat: options.heartbeat});
+                
+                es = new EventSource(url, {withCredentials: true});
+                es.onopen = function(event) {
+                    socket.data("event", event).fire("open");
+                };
+                es.onmessage = function(event) {
+                    socket.data("event", event)._fire(event.data);
+                };
+                es.onerror = function(event) {
                     es.close();
-                }
-            });
+                    // There is no way to find whether this connection closed normally or not
+                    socket.data("event", event).fire("close", "done");
+                };
+            };
+            transport.abort = function() {
+                es.close();
+            };
+            return transport;
         },
         // Streaming Base
         streambase: function(socket, options) {
-            var buffer = "";
-            return support.extend(transports.httpbase(socket, options), {
-                // The detail about parsing is explained in the reference implementation
-                parse: function(chunk) {
-                    // Strips off the left padding of the chunk that appears in the
-                    // first chunk and every chunk for Android browser 2 and 3
-                    chunk = chunk.replace(/^\s+/, "");
-                    // The chunk should be not empty for correct parsing, 
-                    if (chunk) {
-                        var i, 
-                            // String.prototype.split with string separator is reliable cross-browser
-                            lines = (buffer + chunk).split("\n\n");
-                        
-                        for (i = 0; i < lines.length - 1; i++) {
-                            socket._fire(lines[i].substring("data: ".length));
-                        }
-                        buffer = lines[lines.length - 1];
+            var buffer = "",
+                transport = transports.httpbase(socket, options);
+            
+            // The detail about parsing is explained in the reference implementation
+            transport.parse = function(chunk) {
+                // Strips off the left padding of the chunk that appears in the
+                // first chunk and every chunk for Android browser 2 and 3
+                chunk = chunk.replace(/^\s+/, "");
+                // The chunk should be not empty for correct parsing, 
+                if (chunk) {
+                    var i, 
+                        // String.prototype.split with string separator is reliable cross-browser
+                        lines = (buffer + chunk).split("\n\n");
+                    
+                    for (i = 0; i < lines.length - 1; i++) {
+                        socket._fire(lines[i].substring("data: ".length));
                     }
+                    buffer = lines[lines.length - 1];
                 }
-            });
+            };
+            return transport;
         },
         // Streaming - XMLHttpRequest
         streamxhr: function(socket, options) {
-            var xhr;
+            var xhr,
+                transport = transports.streambase(socket, options);
             
             if ((support.browser.msie && +support.browser.version.split(".")[0] < 10) || (options.crossDomain && !support.corsable)) {
                 return;
             }
             
-            return support.extend(transports.streambase(socket, options), {
-                open: function() {
-                    var index, length, 
-                        self = this;
-                    
-                    xhr = support.xhr();
-                    xhr.onreadystatechange = function() {
-                        if (xhr.readyState === 3 && xhr.status === 200) {
-                            length = xhr.responseText.length;
-                            if (!index) {
-                                socket.fire("open");
-                                self.parse(xhr.responseText);
-                            } else if (length > index) {
-                                self.parse(xhr.responseText.substring(index));
-                            }
-                            index = length;
-                        } else if (xhr.readyState === 4) {
-                            socket.fire("close", xhr.status === 200 ? "done" : "error");
+            transport.open = function() {
+                var index, 
+                    length, 
+                    self = this, 
+                    url = support.url(options.url, {id: options.id, when: "open", transport: "streamxhr", heartbeat: options.heartbeat});
+                
+                xhr = support.xhr();
+                xhr.onreadystatechange = function() {
+                    if (xhr.readyState === 3 && xhr.status === 200) {
+                        length = xhr.responseText.length;
+                        if (!index) {
+                            socket.fire("open");
+                            self.parse(xhr.responseText);
+                        } else if (length > index) {
+                            self.parse(xhr.responseText.substring(index));
                         }
-                    };
-                    xhr.open("GET", socket.data("url"));
-                    if (support.corsable) {
-                        xhr.withCredentials = true;
+                        index = length;
+                    } else if (xhr.readyState === 4) {
+                        socket.fire("close", xhr.status === 200 ? "done" : "error");
                     }
-                    xhr.send(null);
-                },
-                abort: function() {
-                    xhr.abort();
+                };
+                xhr.open("GET", url);
+                if (support.corsable) {
+                    xhr.withCredentials = true;
                 }
-            });
+                xhr.send(null);
+            };
+            transport.abort = function() {
+                xhr.abort();
+            };
+            return transport;
         },
         // Streaming - XDomainRequest
         streamxdr: function(socket, options) {
             var xdr,
-                XDomainRequest = window.XDomainRequest;
+                XDomainRequest = window.XDomainRequest,
+                transport = transports.streambase(socket, options);
             
             if (!XDomainRequest || !options.xdrURL) {
                 return;
             }
             
-            return support.extend(transports.streambase(socket, options), {
-                open: function() {
-                    var index, length, 
-                        self = this, url = options.xdrURL.call(socket, socket.data("url"));
-                    
-                    socket.data("url", url);
-                    xdr = new XDomainRequest();
-                    xdr.onprogress = function() {
-                        length = xdr.responseText.length;
-                        if (!index) {
-                            socket.fire("open");
-                            self.parse(xdr.responseText);
-                        } else {
-                            self.parse(xdr.responseText.substring(index));
-                        }
-                        index = length;
-                    };
-                    xdr.onerror = function() {
-                        socket.fire("close", "error");
-                    };
-                    xdr.onload = function() {
-                        socket.fire("close", "done");
-                    };
-                    xdr.open("GET", url);
-                    xdr.send();
-                },
-                abort: function() {
-                    xdr.abort();
-                }
-            });
+            transport.open = function() {
+                var index, 
+                    length, 
+                    self = this, 
+                    url = options.xdrURL.call(socket, support.url(options.url, {id: options.id, when: "open", transport: "streamxdr", heartbeat: options.heartbeat}));
+                
+                xdr = new XDomainRequest();
+                xdr.onprogress = function() {
+                    length = xdr.responseText.length;
+                    if (!index) {
+                        socket.fire("open");
+                        self.parse(xdr.responseText);
+                    } else {
+                        self.parse(xdr.responseText.substring(index));
+                    }
+                    index = length;
+                };
+                xdr.onerror = function() {
+                    socket.fire("close", "error");
+                };
+                xdr.onload = function() {
+                    socket.fire("close", "done");
+                };
+                xdr.open("GET", url);
+                xdr.send();
+            };
+            transport.abort = function() {
+                xdr.abort();
+            };
+            return transport;
         },
         // Streaming - Iframe
         streamiframe: function(socket, options) {
             var doc,
                 stop,
-                ActiveXObject = window.ActiveXObject;
+                ActiveXObject = window.ActiveXObject,
+                transport = transports.streambase(socket, options);
             
             if (!ActiveXObject || options.crossDomain) {
                 return;
@@ -1529,84 +1521,84 @@
                 }
             }
             
-            return support.extend(transports.streambase(socket, options), {
-                open: function() {
-                    var iframe, cdoc,
-                        self = this;
+            transport.open = function() {
+                var iframe, cdoc,
+                    self = this,
+                    url = support.url(options.url, {id: options.id, when: "open", transport: "streamiframe", heartbeat: options.heartbeat});
+                
+                function iterate(fn) {
+                    var timeoutId;
+                    // Though the interval is 1ms for real-time application, there is a delay between setTimeout calls
+                    // For detail, see https://developer.mozilla.org/en/window.setTimeout#Minimum_delay_and_timeout_nesting
+                    (function loop() {
+                        timeoutId = setTimeout(function() {
+                            if (fn() === false) {
+                                return;
+                            }
+                            loop();
+                        }, 1);
+                    })();
+                    return function() {
+                        clearTimeout(timeoutId);
+                    };
+                }
+                
+                doc = new ActiveXObject("htmlfile");
+                doc.open();
+                doc.close();
+                iframe = doc.createElement("iframe");
+                iframe.src = url;
+                doc.body.appendChild(iframe);
+                cdoc = iframe.contentDocument || iframe.contentWindow.document;
+                stop = iterate(function() {
+                    // Response container
+                    var container;
                     
-                    function iterate(fn) {
-                        var timeoutId;
-                        // Though the interval is 1ms for real-time application, there is a delay between setTimeout calls
-                        // For detail, see https://developer.mozilla.org/en/window.setTimeout#Minimum_delay_and_timeout_nesting
-                        (function loop() {
-                            timeoutId = setTimeout(function() {
-                                if (fn() === false) {
-                                    return;
-                                }
-                                loop();
-                            }, 1);
-                        })();
-                        return function() {
-                            clearTimeout(timeoutId);
-                        };
+                    function readDirty() {
+                        var text,
+                            clone = container.cloneNode(true);
+                        // Adds a character not CR and LF to circumvent an Internet Explorer bug
+                        // If the contents of an element ends with one or more CR or LF, Internet Explorer ignores them in the innerText property
+                        clone.appendChild(cdoc.createTextNode("."));
+                        // But the above idea causes \n chars to be replaced with \r\n or for some reason
+                        // Restores them to its original state
+                        text = clone.innerText.replace(/\r\n/g, "\n");
+                        return text.substring(0, text.length - 1);
                     }
                     
-                    doc = new ActiveXObject("htmlfile");
-                    doc.open();
-                    doc.close();
-                    iframe = doc.createElement("iframe");
-                    iframe.src = socket.data("url");
-                    doc.body.appendChild(iframe);
-                    cdoc = iframe.contentDocument || iframe.contentWindow.document;
+                    // Waits the server's container ignorantly
+                    if (!cdoc.firstChild) {
+                        return;
+                    }
+                    container = cdoc.body.lastChild;
+                    // Detects connection failure
+                    if (!container) {
+                        socket.fire("close", "error");
+                        return false;
+                    }
+                    socket.fire("open");
+                    self.parse(readDirty());
+                    // The container is resetable so no index or length variable is needed
+                    container.innerText = "";
                     stop = iterate(function() {
-                        // Response container
-                        var container;
-                        
-                        function readDirty() {
-                            var text,
-                                clone = container.cloneNode(true);
-                            // Adds a character not CR and LF to circumvent an Internet Explorer bug
-                            // If the contents of an element ends with one or more CR or LF, Internet Explorer ignores them in the innerText property
-                            clone.appendChild(cdoc.createTextNode("."));
-                            // But the above idea causes \n chars to be replaced with \r\n or for some reason
-                            // Restores them to its original state
-                            text = clone.innerText.replace(/\r\n/g, "\n");
-                            return text.substring(0, text.length - 1);
+                        var text = readDirty();
+                        if (text) {
+                            container.innerText = "";
+                            self.parse(text);
                         }
-                        
-                        // Waits the server's container ignorantly
-                        if (!cdoc.firstChild) {
-                            return;
-                        }
-                        container = cdoc.body.lastChild;
-                        // Detects connection failure
-                        if (!container) {
-                            socket.fire("close", "error");
+                        if (cdoc.readyState === "complete") {
+                            socket.fire("close", "done");
                             return false;
                         }
-                        socket.fire("open");
-                        self.parse(readDirty());
-                        // The container is resetable so no index or length variable is needed
-                        container.innerText = "";
-                        stop = iterate(function() {
-                            var text = readDirty();
-                            if (text) {
-                                container.innerText = "";
-                                self.parse(text);
-                            }
-                            if (cdoc.readyState === "complete") {
-                                socket.fire("close", "done");
-                                return false;
-                            }
-                        });
-                        return false;
                     });
-                },
-                abort: function() {
-                    stop();
-                    doc.execCommand("Stop");
-                }
-            });
+                    return false;
+                });
+            };
+            transport.abort = function() {
+                stop();
+                doc.execCommand("Stop");
+            };
+            return transport;
         },
         // Long polling facade
         longpoll: function(socket) {
@@ -1614,176 +1606,177 @@
         },
         // Long polling Base
         longpollbase: function(socket, options) {
-            return support.extend(transports.httpbase(socket, options), {
-                open: function() {
-                    this.connect("open");
-                },
-                parse: function(data) {
-                    var eventIds = [], 
-                        obj = options.inbound.call(socket, data), 
-                        array = !support.isArray(obj) ? [obj] : obj;
-                    
-                    support.each(array, function(i, event) {
-                        eventIds.push(event.id);
-                    });
-                    this.connect("poll", {lastEventIds: eventIds.join(",")});
-                    support.each(array, function(i, event) {
-                        // TODO wrong use case of outbound option
-                        socket._fire(options.outbound.call(socket, event));
-                    });
-                }
-            });
+            var transport = transports.httpbase(socket, options);
+            transport.parse = function(data) {
+                var eventIds = [], 
+                    obj = options.inbound.call(socket, data), 
+                    array = !support.isArray(obj) ? [obj] : obj;
+                
+                support.each(array, function(i, event) {
+                    eventIds.push(event.id);
+                });
+                this.connect({id: options.id, when: "poll", lastEventIds: eventIds.join(",")});
+                support.each(array, function(i, event) {
+                    // TODO wrong use case of outbound option
+                    socket._fire(options.outbound.call(socket, event));
+                });
+            };
+            return transport;
         },
         // Long polling - AJAX
         longpollajax: function(socket, options) {
-            var xhr;
+            var xhr,
+                transport = transports.longpollbase(socket, options);
             
             if (options.crossDomain && !support.corsable) {
                 return;
             }
             
-            return support.extend(transports.longpollbase(socket, options), {
-                connect: function(when, params) {
-                    var self = this, url = socket.buildURL(when, params);
-                    
-                    socket.data("url", url);
-                    xhr = support.xhr();
-                    xhr.onreadystatechange = function() {
-                        // Avoids c00c023f error on Internet Explorer 9
-                        if (xhr.readyState === 4) {
-                            if (xhr.status === 200) {
-                                if (when === "open") {
-                                    self.connect("poll", {lastEventIds: ""});
-                                    socket.fire("open");
-                                } else {
-                                    var data = xhr.responseText;
-                                    if (data) {
-                                        self.parse(data);
-                                    } else {
-                                        socket.fire("close", "done");
-                                    }
-                                }
+            transport.open = function() {
+                this.connect({id: options.id, when: "open", transport: "longpollajax", heartbeat: options.heartbeat});
+            };
+            transport.connect = function(params) {
+                var self = this, 
+                    url = support.url(options.url, params);
+                
+                xhr = support.xhr();
+                xhr.onreadystatechange = function() {
+                    // Avoids c00c023f error on Internet Explorer 9
+                    if (xhr.readyState === 4) {
+                        if (xhr.status === 200) {
+                            if (params.when === "open") {
+                                self.connect({id: options.id, when: "poll", lastEventIds: ""});
+                                socket.fire("open");
                             } else {
-                                socket.fire("close", "error");
+                                var data = xhr.responseText;
+                                if (data) {
+                                    self.parse(data);
+                                } else {
+                                    socket.fire("close", "done");
+                                }
                             }
+                        } else {
+                            socket.fire("close", "error");
                         }
-                    };
-                    xhr.open("GET", url);
-                    if (support.corsable) {
-                        xhr.withCredentials = true;
                     }
-                    xhr.send(null);
-                },
-                abort: function() {
-                    xhr.abort();
+                };
+                xhr.open("GET", url);
+                if (support.corsable) {
+                    xhr.withCredentials = true;
                 }
-            });
+                xhr.send(null);
+            };
+            transport.abort = function() {
+                xhr.abort();
+            };
+            return transport;
         },
         // Long polling - XDomainRequest
         longpollxdr: function(socket, options) {
             var xdr,
-                XDomainRequest = window.XDomainRequest;
+                XDomainRequest = window.XDomainRequest,
+                transport = transports.longpollbase(socket, options);
             
             if (!XDomainRequest || !options.xdrURL) {
                 return;
             }
             
-            return support.extend(transports.longpollbase(socket, options), {
-                connect: function(when, params) {
-                    var self = this, url = options.xdrURL.call(socket, socket.buildURL(when, params));
-                    
-                    socket.data("url", url);
-                    xdr = new XDomainRequest();
-                    xdr.onload = function() {
-                        if (when === "open") {
-                            self.connect("poll", {lastEventIds: ""});
-                            socket.fire("open");
+            transport.open = function() {
+                this.connect({id: options.id, when: "open", transport: "longpollxdr", heartbeat: options.heartbeat});
+            };
+            transport.connect = function(params) {
+                var self = this, url = options.xdrURL.call(socket, support.url(options.url, params));
+                
+                xdr = new XDomainRequest();
+                xdr.onload = function() {
+                    if (params.when === "open") {
+                        self.connect({id: options.id, when: "poll", lastEventIds: ""});
+                        socket.fire("open");
+                    } else {
+                        var data = xdr.responseText;
+                        if (data) {
+                            self.parse(data);
                         } else {
-                            var data = xdr.responseText;
-                            if (data) {
-                                self.parse(data);
-                            } else {
-                                socket.fire("close", "done");
-                            }
+                            socket.fire("close", "done");
                         }
-                    };
-                    xdr.onerror = function() {
-                        socket.fire("close", "error");
-                    };
-                    xdr.open("GET", url);
-                    xdr.send();
-                },
-                abort: function() {
-                    xdr.abort();
-                }
-            });
+                    }
+                };
+                xdr.onerror = function() {
+                    socket.fire("close", "error");
+                };
+                xdr.open("GET", url);
+                xdr.send();
+            };
+            transport.abort = function() {
+                xdr.abort();
+            };
+            return transport;
         },
         // Long polling - JSONP
         longpolljsonp: function(socket, options) {
             var script,
-                called;
+                called,
+                transport = transports.longpollbase(socket, options);
             
-            return support.extend(transports.longpollbase(socket, options), {
-                open: function() {
-                    var self = this, callback = jsonpCallbacks.pop() || ("socket_" + (++guid));
-                    // Attaches callback
-                    window[callback] = function(data) {
-                        self.parse(data);
-                        called = true;
-                    };
-                    socket.one("close", function() {
-                        // Assings an empty function for browsers which are not able to cancel a request made from script tag
-                        window[callback] = function() {};
-                        jsonpCallbacks.push(callback);
-                    });
-                    self.connect("open", {callback: callback});
-                },
-                connect: function(when, params) {
-                    var self = this, url = socket.buildURL(when, params),
-                        head = document.head || document.getElementsByTagName("head")[0] || document.documentElement;
-                    
-                    socket.data("url", url);
-                    script = document.createElement("script");
-                    script.async = true;
-                    script.src = url;
-                    script.clean = function() {
-                        // Assigns null to attributes to avoid memory leak in IE
-                        // doing it to src stops connection in IE 6 and 7
-                        script.clean = script.src = script.onerror = script.onload = script.onreadystatechange = null;
-                        if (script.parentNode) {
-                            script.parentNode.removeChild(script);
-                        }
-                    };
-                    script.onload = script.onreadystatechange = function() {
-                        if (!script.readyState || /loaded|complete/.test(script.readyState)) {
-                            if (script.clean) {
-                                script.clean();
-                            }
-                            if (when === "open") {
-                                self.connect("poll", {lastEventIds: ""});
-                                socket.fire("open");
-                            } else {
-                                // window[callback] is executed before this listener
-                                if (called) {
-                                    called = false;
-                                } else {
-                                    socket.fire("close", "done");
-                                }
-                            }
-                        }
-                    };
-                    script.onerror = function() {
-                        script.clean();
-                        socket.fire("close", "error");
-                    };
-                    head.insertBefore(script, head.firstChild);                        
-                },
-                abort: function() {
-                    if (script.clean) {
-                        script.clean();
+            transport.open = function() {
+                var self = this, callback = jsonpCallbacks.pop() || ("socket_" + (++guid));
+                // Attaches callback
+                window[callback] = function(data) {
+                    self.parse(data);
+                    called = true;
+                };
+                socket.one("close", function() {
+                    // Assings an empty function for browsers which are not able to cancel a request made from script tag
+                    window[callback] = function() {};
+                    jsonpCallbacks.push(callback);
+                });
+                self.connect({id: options.id, when: "open", transport: "longpolljsonp", heartbeat: options.heartbeat, callback: callback});
+            };
+            transport.connect = function(params) {
+                var self = this, url = support.url(options.url, params),
+                    head = document.head || document.getElementsByTagName("head")[0] || document.documentElement;
+                
+                script = document.createElement("script");
+                script.async = true;
+                script.src = url;
+                script.clean = function() {
+                    // Assigns null to attributes to avoid memory leak in IE
+                    // doing it to src stops connection in IE 6 and 7
+                    script.clean = script.src = script.onerror = script.onload = script.onreadystatechange = null;
+                    if (script.parentNode) {
+                        script.parentNode.removeChild(script);
                     }
+                };
+                script.onload = script.onreadystatechange = function() {
+                    if (!script.readyState || /loaded|complete/.test(script.readyState)) {
+                        if (script.clean) {
+                            script.clean();
+                        }
+                        if (params.when === "open") {
+                            self.connect({id: options.id, when: "poll", lastEventIds: ""});
+                            socket.fire("open");
+                        } else {
+                            // window[callback] is executed before this listener
+                            if (called) {
+                                called = false;
+                            } else {
+                                socket.fire("close", "done");
+                            }
+                        }
+                    }
+                };
+                script.onerror = function() {
+                    script.clean();
+                    socket.fire("close", "error");
+                };
+                head.insertBefore(script, head.firstChild);                        
+            };
+            transport.abort = function() {
+                if (script.clean) {
+                    script.clean();
                 }
-            });
+            }
+            return transport;
         }
     };
     
