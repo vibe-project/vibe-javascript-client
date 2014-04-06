@@ -1567,23 +1567,33 @@
         // Long polling Base
         longpollbase: function(socket, options) {
             var self = transports.httpbase(socket, options);
-            self.uri.poll = function(lastEventIds) {
-                return support.url(options.url, {id: options.id, when: "poll", lastEventIds: (lastEventIds || []).join(",")});
+            self.uri.poll = function(eventIds) {
+                return support.url(options.url, {id: options.id, when: "poll", lastEventIds: eventIds.join(",")});
             };
             self.open = function() {
-                self.connect(self.uri.open(), true);
-            };
-            self.parse = function(data) {
-                var eventIds = [], 
-                    obj = support.parseJSON(data), 
-                    array = !support.isArray(obj) ? [obj] : obj;
-                
-                support.each(array, function(i, event) {
-                    eventIds.push(event.id);
-                });
-                self.connect(self.uri.poll(eventIds));
-                support.each(array, function(i, event) {
-                    socket._fire(support.stringifyJSON(event));
+                self.connect(self.uri.open(), function() {
+                    function poll(eventIds) {
+                        self.connect(self.uri.poll(eventIds), function(data) {
+                            if (data) {
+                                var eventIds = [], 
+                                    obj = support.parseJSON(data), 
+                                    array = !support.isArray(obj) ? [obj] : obj;
+                                
+                                support.each(array, function(i, event) {
+                                    eventIds.push(event.id);
+                                });
+                                poll(eventIds);
+                                support.each(array, function(i, event) {
+                                    socket._fire(support.stringifyJSON(event));
+                                });
+                            } else {
+                                socket.fire("close", "done");
+                            }
+                        });
+                    }
+                    
+                    poll([]);
+                    socket.fire("open");
                 });
             };
             return self;
@@ -1597,23 +1607,13 @@
                 return;
             }
             
-            self.connect = function(url, open) {
+            self.connect = function(url, fn) {
                 xhr = support.xhr();
                 xhr.onreadystatechange = function() {
                     // Avoids c00c023f error on Internet Explorer 9
                     if (xhr.readyState === 4) {
                         if (xhr.status === 200) {
-                            if (open) {
-                                self.connect(self.uri.poll());
-                                socket.fire("open");
-                            } else {
-                                var data = xhr.responseText;
-                                if (data) {
-                                    self.parse(data);
-                                } else {
-                                    socket.fire("close", "done");
-                                }
-                            }
+                            fn(xhr.responseText);
                         } else {
                             socket.fire("close", "error");
                         }
@@ -1640,21 +1640,11 @@
                 return;
             }
 
-            self.connect = function(url, open) {
+            self.connect = function(url, fn) {
                 url = options.xdrURL.call(socket, url);
                 xdr = new XDomainRequest();
                 xdr.onload = function() {
-                    if (open) {
-                        self.connect(self.uri.poll());
-                        socket.fire("open");
-                    } else {
-                        var data = xdr.responseText;
-                        if (data) {
-                            self.parse(data);
-                        } else {
-                            socket.fire("close", "done");
-                        }
-                    }
+                    fn(xdr.responseText);
                 };
                 xdr.onerror = function() {
                     socket.fire("close", "error");
@@ -1670,14 +1660,12 @@
         // Long polling - JSONP
         longpolljsonp: function(socket, options) {
             var script,
-                called,
                 callback = jsonpCallbacks.pop() || ("socket_" + (++guid)),
                 self = transports.longpollbase(socket, options);
             
             // Attaches callback
             window[callback] = function(data) {
-                self.parse(data);
-                called = true;
+                script.responseText = data;
             };
             socket.one("close", function() {
                 // Assings an empty function for browsers which are not able to cancel a request made from script tag
@@ -1688,7 +1676,7 @@
             self.uri.open = function() {
                 return self.uri._open.apply(self, arguments) + "&callback=" + callback;
             };
-            self.connect = function(url, open) {
+            self.connect = function(url, fn) {
                 var head = document.head || document.getElementsByTagName("head")[0] || document.documentElement;
                 
                 script = document.createElement("script");
@@ -1707,17 +1695,7 @@
                         if (script.clean) {
                             script.clean();
                         }
-                        if (open) {
-                            self.connect(self.uri.poll());
-                            socket.fire("open");
-                        } else {
-                            // window[callback] is executed before this listener
-                            if (called) {
-                                called = false;
-                            } else {
-                                socket.fire("close", "done");
-                            }
-                        }
+                        fn(script.responseText);
                     }
                 };
                 script.onerror = function() {
