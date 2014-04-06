@@ -130,10 +130,11 @@
     
     // Socket function
     function socket(url, options) {
-        var    // Final options
+        var // Final options
             opts,
             // Transport
             transport,
+            isSessionTransport,
             // The state of the connection
             state,
             // Reconnection
@@ -147,24 +148,13 @@
             replyCallbacks = {},
             // Buffer
             buffer = [],
-            // Map of the connection-scoped values
-            connection = {},
+            // To check cross-origin
             parts = /^([\w\+\.\-]+:)(?:\/\/([^\/?#:]*)(?::(\d+))?)?/.exec(url.toLowerCase()),
             // Socket object
             self = {
                 // Finds the value of an option
                 option: function(key) {
                     return opts[key];
-                },
-                // Gets or sets a connection-scoped value
-                data: function(key, value) {
-                    if (value === undefined) {
-                        return connection[key];
-                    }
-                    
-                    connection[key] = value;
-                    
-                    return this;
                 },
                 // Returns the state
                 state: function() {
@@ -235,24 +225,23 @@
                     
                     // Cancels the scheduled connection
                     clearTimeout(reconnectTimer);
-                    // Resets the connection scope and event helpers
-                    connection = {};
+                    // Resets event helpers
                     for (type in events) {
                         events[type].unlock();
                     }
                     // Chooses transport
-                    transport = undefined;
+                    transport = isSessionTransport = null;
                     // From null or waiting state
                     state = "preparing";
                     
                     // Check if possible to make use of a shared socket
                     if (opts.sharing) {
-                        connection.transport = "session";
+                        isSessionTransport = true;
                         transport = transports.session(self, opts);
                     } else {
                         candidates = slice.call(opts.transports);
                         while (!transport && candidates.length) {
-                            connection.transport = type = candidates.shift();
+                            type = candidates.shift();
                             switch (type) {
                             case "stream":
                                 candidates.unshift("sse", "streamxhr", "streamxdr", "streamiframe");
@@ -282,8 +271,6 @@
                 },
                 // Sends an event to the server via the connection
                 send: function(type, data, doneCallback, failCallback) {
-                    var event;
-                    
                     // Defers sending an event until the state become opened
                     if (state !== "opened") {
                         buffer.push(arguments);
@@ -291,30 +278,26 @@
                     }
                     
                     // Outbound event
-                    event = {
-                        id: ++eventId,
-                        socket: opts.id,
-                        type: type,
-                        data: data,
-                        reply: !!(doneCallback || failCallback)
-                    };
+                    var event = {
+                            id: ++eventId,
+                            socket: opts.id,
+                            type: type,
+                            data: data,
+                            reply: !!(doneCallback || failCallback)
+                        };
                     
                     if (event.reply) {
                         // Shared socket needs to know the callback event name
                         // because it fires the callback event directly instead of using reply event
-                        if (connection.transport === "session") {
+                        if (isSessionTransport) {
                             event.doneCallback = doneCallback;
                             event.failCallback = failCallback;
                         } else {
                             replyCallbacks[eventId] = {done: doneCallback, fail: failCallback};
                         }
                     }
-                    
                     // Delegates to the transport
-                    transport.send(support.isBinary(data) || connection.transport === "session" ? 
-                        data : 
-                        support.stringifyJSON(event));
-                    
+                    transport.send(support.isBinary(data) || isSessionTransport ? data : support.stringifyJSON(event));
                     return this;
                 },
                 // Disconnects the connection
@@ -582,7 +565,7 @@
                 }
                 
                 // Share the socket if possible
-                if (opts.sharing && connection.transport !== "session") {
+                if (opts.sharing && !isSessionTransport) {
                     share();
                 }
             },
@@ -1224,17 +1207,17 @@
                 var url = support.url(options.url, {id: options.id, when: "open", transport: "ws", heartbeat: options.heartbeat}).replace(/^http/, "ws");
                 
                 ws = new WebSocket(url);
-                ws.onopen = function(event) {
-                    socket.data("event", event).fire("open");
+                ws.onopen = function() {
+                    socket.fire("open");
                 };
                 ws.onmessage = function(event) {
-                    socket.data("event", event)._fire(event.data);
+                    socket._fire(event.data);
                 };
-                ws.onerror = function(event) {
-                    socket.data("event", event).fire("close", aborted ? "aborted" : "error");
+                ws.onerror = function() {
+                    socket.fire("close", aborted ? "aborted" : "error");
                 };
                 ws.onclose = function(event) {
-                    socket.data("event", event).fire("close", aborted ? "aborted" : event.wasClean ? "done" : "error");
+                    socket.fire("close", aborted ? "aborted" : event.wasClean ? "done" : "error");
                 };
             };
             transport.send = function(data) {
@@ -1352,16 +1335,16 @@
                 var url = support.url(options.url, {id: options.id, when: "open", transport: "sse", heartbeat: options.heartbeat});
                 
                 es = new EventSource(url, {withCredentials: true});
-                es.onopen = function(event) {
-                    socket.data("event", event).fire("open");
+                es.onopen = function() {
+                    socket.fire("open");
                 };
                 es.onmessage = function(event) {
-                    socket.data("event", event)._fire(event.data);
+                    socket._fire(event.data);
                 };
-                es.onerror = function(event) {
+                es.onerror = function() {
                     es.close();
                     // There is no way to find whether this connection closed normally or not
-                    socket.data("event", event).fire("close", "done");
+                    socket.fire("close", "done");
                 };
             };
             transport.abort = function() {
