@@ -344,40 +344,33 @@
                 // For internal use only
                 // fires events from the server
                 _fire: function(data) {
-                    var array;
+                    var event, latch, args;
                     
                     if (support.isBinary(data)) {
-                        array = [{type: "message", data: data}];
+                        event = {type: "message", data: data};
                     } else {
-                        array = opts.inbound.call(self, data);
-                        array = array == null ? [] : !support.isArray(array) ? [array] : array;
+                        event = opts.inbound.call(self, data);
                     }
                     
-                    connection.lastEventIds = [];
-                    support.each(array, function(i, event) {
-                        var latch, args = [event.type, event.data];
-                        
-                        connection.lastEventIds.push(event.id);
-                        if (event.reply) {
-                            args.push({
-                                resolve: function(value) {
-                                    if (!latch) {
-                                        latch = true;
-                                        self.send("reply", {id: event.id, data: value, exception: false});
-                                    }
-                                },
-                                reject: function(reason) {
-                                    if (!latch) {
-                                        latch = true;
-                                        self.send("reply", {id: event.id, data: reason, exception: true});
-                                    }
+                    args = [event.type, event.data];
+                    if (event.reply) {
+                        args.push({
+                            resolve: function(value) {
+                                if (!latch) {
+                                    latch = true;
+                                    self.send("reply", {id: event.id, data: value, exception: false});
                                 }
-                            });
-                        }
-                        
-                        self.fire.apply(self, args).fire("_message", args);
-                    });
+                            },
+                            reject: function(reason) {
+                                if (!latch) {
+                                    latch = true;
+                                    self.send("reply", {id: event.id, data: reason, exception: true});
+                                }
+                            }
+                        });
+                    }
                     
+                    self.fire.apply(self, args).fire("_message", args);
                     return this;
                 },
                 // For internal use only
@@ -387,11 +380,7 @@
                             {
                                 transport: connection.transport,
                                 heartbeat: opts.heartbeat
-                            } :
-                            when === "poll" ?
-                            {
-                                lastEventIds: connection.lastEventIds && connection.lastEventIds.join(",")
-                            } :
+                            } : 
                             {};
                     
                     support.extend(p, {id: opts.id, _: guid++}, opts.params && opts.params[when], params);
@@ -1623,64 +1612,69 @@
         longpoll: function(socket) {
             socket.data("candidates").unshift("longpollajax", "longpollxdr", "longpolljsonp");
         },
+        // Long polling Base
+        longpollbase: function(socket, options) {
+            return support.extend(transports.httpbase(socket, options), {
+                open: function() {
+                    this.connect("open");
+                },
+                parse: function(data) {
+                    var eventIds = [], 
+                        obj = options.inbound.call(socket, data), 
+                        array = !support.isArray(obj) ? [obj] : obj;
+                    
+                    support.each(array, function(i, event) {
+                        eventIds.push(event.id);
+                    });
+                    this.connect("poll", {lastEventIds: eventIds.join(",")});
+                    support.each(array, function(i, event) {
+                        // TODO wrong use case of outbound option
+                        socket._fire(options.outbound.call(socket, event));
+                    });
+                }
+            });
+        },
         // Long polling - AJAX
         longpollajax: function(socket, options) {
-            var xhr,
-                aborted,
-                count = 0;
+            var xhr;
             
             if (options.crossDomain && !support.corsable) {
                 return;
             }
             
-            return support.extend(transports.httpbase(socket, options), {
-                open: function() {
-                    function poll() {
-                        var url = socket.buildURL(!count ? "open" : "poll");
-                        
-                        count++;
-                        socket.data("url", url);
-                        
-                        xhr = support.xhr();
-                        xhr.onreadystatechange = function() {
-                            var data;
-                            
-                            // Avoids c00c023f error on Internet Explorer 9
-                            if (!aborted && xhr.readyState === 4) {
-                                if (xhr.status === 200) {
-                                    data = xhr.responseText;
-                                    if (data || count === 1) {
-                                        if (count === 1) {
-                                            socket.fire("open");
-                                        }
-                                        if (data) {
-                                            socket._fire(data);
-                                        }
-                                        // Do not poll again if the connection has been aborted in open event
-                                        if (!aborted) {
-                                            poll();
-                                        }
+            return support.extend(transports.longpollbase(socket, options), {
+                connect: function(when, params) {
+                    var self = this, url = socket.buildURL(when, params);
+                    
+                    socket.data("url", url);
+                    xhr = support.xhr();
+                    xhr.onreadystatechange = function() {
+                        // Avoids c00c023f error on Internet Explorer 9
+                        if (xhr.readyState === 4) {
+                            if (xhr.status === 200) {
+                                if (when === "open") {
+                                    self.connect("poll", {lastEventIds: ""});
+                                    socket.fire("open");
+                                } else {
+                                    var data = xhr.responseText;
+                                    if (data) {
+                                        self.parse(data);
                                     } else {
                                         socket.fire("close", "done");
                                     }
-                                } else {
-                                    socket.fire("close", "error");
                                 }
+                            } else {
+                                socket.fire("close", "error");
                             }
-                        };
-                        
-                        xhr.open("GET", url);
-                        if (support.corsable) {
-                            xhr.withCredentials = true;
                         }
-                        
-                        xhr.send(null);
+                    };
+                    xhr.open("GET", url);
+                    if (support.corsable) {
+                        xhr.withCredentials = true;
                     }
-                    
-                    poll();
+                    xhr.send(null);
                 },
                 abort: function() {
-                    aborted = true;
                     xhr.abort();
                 }
             });
@@ -1688,53 +1682,38 @@
         // Long polling - XDomainRequest
         longpollxdr: function(socket, options) {
             var xdr,
-                aborted,
-                count = 0,
                 XDomainRequest = window.XDomainRequest;
             
             if (!XDomainRequest || !options.xdrURL) {
                 return;
             }
             
-            return support.extend(transports.httpbase(socket, options), {
-                open: function() {
-                    function poll() {
-                        var url = options.xdrURL.call(socket, socket.buildURL(!count ? "open" : "poll"));
-                        
-                        count++;
-                        socket.data("url", url);
-                        
-                        xdr = new XDomainRequest();
-                        xdr.onload = function() {
+            return support.extend(transports.longpollbase(socket, options), {
+                connect: function(when, params) {
+                    var self = this, url = options.xdrURL.call(socket, socket.buildURL(when, params));
+                    
+                    socket.data("url", url);
+                    xdr = new XDomainRequest();
+                    xdr.onload = function() {
+                        if (when === "open") {
+                            self.connect("poll", {lastEventIds: ""});
+                            socket.fire("open");
+                        } else {
                             var data = xdr.responseText;
-                            
-                            if (data || count === 1) {
-                                if (count === 1) {
-                                    socket.fire("open");
-                                }
-                                if (data) {
-                                    socket._fire(data);
-                                }
-                                // Do not poll again if the connection has been aborted in open event
-                                if (!aborted) {
-                                    poll();
-                                }
+                            if (data) {
+                                self.parse(data);
                             } else {
                                 socket.fire("close", "done");
                             }
-                        };
-                        xdr.onerror = function() {
-                            socket.fire("close", "error");
-                        };
-                        
-                        xdr.open("GET", url);
-                        xdr.send();
-                    }
-                    
-                    poll();
+                        }
+                    };
+                    xdr.onerror = function() {
+                        socket.fire("close", "error");
+                    };
+                    xdr.open("GET", url);
+                    xdr.send();
                 },
                 abort: function() {
-                    aborted = true;
                     xdr.abort();
                 }
             });
@@ -1742,75 +1721,64 @@
         // Long polling - JSONP
         longpolljsonp: function(socket, options) {
             var script,
-                called,
-                aborted,
-                count = 0,
-                callback = jsonpCallbacks.pop() || ("socket_" + (++guid));
+                called;
             
-            return support.extend(transports.httpbase(socket, options), {
+            return support.extend(transports.longpollbase(socket, options), {
                 open: function() {
-                    function poll() {
-                        var url = socket.buildURL(!count ? "open" : "poll", {callback: callback, count: ++count}),
-                            head = document.head || document.getElementsByTagName("head")[0] || document.documentElement;
-                        
-                        count++;
-                        socket.data("url", url);
-                        
-                        script = document.createElement("script");
-                        script.async = true;
-                        script.src = url;
-                        script.clean = function() {
-                            // Assigning null to src attribute works in IE 6 and 7
-                            script.clean = script.src = script.onerror = script.onload = script.onreadystatechange = null;
-                            if (script.parentNode) {
-                                script.parentNode.removeChild(script);
-                            }
-                        };
-                        script.onload = script.onreadystatechange = function() {
-                            if (!script.readyState || /loaded|complete/.test(script.readyState)) {
-                                script.clean();
-                                if (called) {
-                                    called = false;
-                                    if (!aborted) {
-                                        poll();
-                                    }
-                                } else if (count === 1) {
-                                    socket.fire("open");
-                                    // Do not poll again if the connection has been aborted in open event
-                                    if (!aborted) {
-                                        poll();
-                                    }
-                                } else {
-                                    socket.fire("close", "done");
-                                }
-                            }
-                        };
-                        script.onerror = function() {
-                            script.clean();
-                            socket.fire("close", "error");
-                        };
-                        
-                        head.insertBefore(script, head.firstChild);
-                    }
-                    
+                    var self = this, callback = jsonpCallbacks.pop() || ("socket_" + (++guid));
                     // Attaches callback
                     window[callback] = function(data) {
+                        self.parse(data);
                         called = true;
-                        if (count === 1) {
-                            socket.fire("open");
-                        }
-                        socket._fire(data);
                     };
                     socket.one("close", function() {
                         // Assings an empty function for browsers which are not able to cancel a request made from script tag
                         window[callback] = function() {};
                         jsonpCallbacks.push(callback);
                     });
+                    self.connect("open", {callback: callback});
+                },
+                connect: function(when, params) {
+                    var self = this, url = socket.buildURL(when, params),
+                        head = document.head || document.getElementsByTagName("head")[0] || document.documentElement;
                     
-                    poll();
+                    socket.data("url", url);
+                    script = document.createElement("script");
+                    script.async = true;
+                    script.src = url;
+                    script.clean = function() {
+                        // Assigns null to attributes to avoid memory leak in IE
+                        // doing it to src stops connection in IE 6 and 7
+                        script.clean = script.src = script.onerror = script.onload = script.onreadystatechange = null;
+                        if (script.parentNode) {
+                            script.parentNode.removeChild(script);
+                        }
+                    };
+                    script.onload = script.onreadystatechange = function() {
+                        if (!script.readyState || /loaded|complete/.test(script.readyState)) {
+                            if (script.clean) {
+                                script.clean();
+                            }
+                            if (when === "open") {
+                                self.connect("poll", {lastEventIds: ""});
+                                socket.fire("open");
+                            } else {
+                                // window[callback] is executed before this listener
+                                if (called) {
+                                    called = false;
+                                } else {
+                                    socket.fire("close", "done");
+                                }
+                            }
+                        }
+                    };
+                    script.onerror = function() {
+                        script.clean();
+                        socket.fire("close", "error");
+                    };
+                    head.insertBefore(script, head.firstChild);                        
                 },
                 abort: function() {
-                    aborted = true;
                     if (script.clean) {
                         script.clean();
                     }
