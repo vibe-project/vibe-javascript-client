@@ -261,6 +261,7 @@
                         }
                         // Fires the connecting event and connects
                         if (transport) {
+                            opts.transport = type;
                             self.fire("connecting");
                             transport.open();
                         } else {
@@ -1190,21 +1191,31 @@
                 }
             };
         },
+        // Base
+        base: function(socket, options) {
+            var self = {};
+            self.uri = {
+                open: function() {
+                    return support.url(options.url, {id: options.id, when: "open", transport: options.transport, heartbeat: options.heartbeat});
+                }
+            };
+            return self;
+        },
         // WebSocket
         ws: function(socket, options) {
             var ws,
                 aborted,
                 WebSocket = window.WebSocket,
-                transport = {};
+                self = transports.base(socket, options);
             
             if (!WebSocket) {
                 return;
             }
             
-            transport.open = function() {
+            self.open = function() {
                 // Changes options.url's protocol part to ws or wss
                 // options.url is absolute path
-                var url = support.url(options.url, {id: options.id, when: "open", transport: "ws", heartbeat: options.heartbeat}).replace(/^http/, "ws");
+                var url = self.uri.open().replace(/^http/, "ws");
                 
                 ws = new WebSocket(url);
                 ws.onopen = function() {
@@ -1220,21 +1231,21 @@
                     socket.fire("close", aborted ? "aborted" : event.wasClean ? "done" : "error");
                 };
             };
-            transport.send = function(data) {
+            self.send = function(data) {
                 ws.send(data);
             };
-            transport.close = function() {
+            self.close = function() {
                 aborted = true;
                 ws.close();
             };
-            return transport;
+            return self;
         },
         // HTTP Base
         httpbase: function(socket, options) {
             var send,
                 sending,
                 queue = [],
-                transport = {};
+                self = transports.base(socket, options);
             
             function post() {
                 if (queue.length) {
@@ -1290,19 +1301,19 @@
                 form.submit();
             };
             
-            transport.send = function(data) {
+            self.send = function(data) {
                 queue.push(data);
                 if (!sending) {
                     sending = true;
                     post();
                 }
             };
-            transport.close = function() {
+            self.close = function() {
                 // Fires the close event immediately
                 // unloading variable prevents those who use this connection from being aborted
                 socket.fire("close", unloading ? "error" : "aborted");
                 // Aborts the real connection
-                this.abort();
+                self.abort();
                 // Sends the abort request to the server
                 // this request is supposed to run in unloading event so script tag should be used
                 var script = document.createElement("script"),
@@ -1319,20 +1330,20 @@
                 };
                 head.insertBefore(script, head.firstChild);
             };
-            return transport;
+            return self;
         },
         // Streaming - Server-Sent Events
         sse: function(socket, options) {
             var es,
                 EventSource = window.EventSource,
-                transport = transports.httpbase(socket, options);
+                self = transports.httpbase(socket, options);
             
             if (!EventSource) {
                 return;
             }
             
-            transport.open = function() {
-                var url = support.url(options.url, {id: options.id, when: "open", transport: "sse", heartbeat: options.heartbeat});
+            self.open = function() {
+                var url = self.uri.open();
                 
                 es = new EventSource(url, {withCredentials: true});
                 es.onopen = function() {
@@ -1347,18 +1358,18 @@
                     socket.fire("close", "done");
                 };
             };
-            transport.abort = function() {
+            self.abort = function() {
                 es.close();
             };
-            return transport;
+            return self;
         },
         // Streaming Base
         streambase: function(socket, options) {
             var buffer = "",
-                transport = transports.httpbase(socket, options);
+                self = transports.httpbase(socket, options);
             
             // The detail about parsing is explained in the reference implementation
-            transport.parse = function(chunk) {
+            self.parse = function(chunk) {
                 // Strips off the left padding of the chunk that appears in the
                 // first chunk and every chunk for Android browser 2 and 3
                 chunk = chunk.replace(/^\s+/, "");
@@ -1374,22 +1385,21 @@
                     buffer = lines[lines.length - 1];
                 }
             };
-            return transport;
+            return self;
         },
         // Streaming - XMLHttpRequest
         streamxhr: function(socket, options) {
             var xhr,
-                transport = transports.streambase(socket, options);
+                self = transports.streambase(socket, options);
             
             if ((support.browser.msie && +support.browser.version.split(".")[0] < 10) || (options.crossDomain && !support.corsable)) {
                 return;
             }
             
-            transport.open = function() {
+            self.open = function() {
                 var index, 
                     length, 
-                    self = this, 
-                    url = support.url(options.url, {id: options.id, when: "open", transport: "streamxhr", heartbeat: options.heartbeat});
+                    url = self.uri.open();
                 
                 xhr = support.xhr();
                 xhr.onreadystatechange = function() {
@@ -1412,26 +1422,25 @@
                 }
                 xhr.send(null);
             };
-            transport.abort = function() {
+            self.abort = function() {
                 xhr.abort();
             };
-            return transport;
+            return self;
         },
         // Streaming - XDomainRequest
         streamxdr: function(socket, options) {
             var xdr,
                 XDomainRequest = window.XDomainRequest,
-                transport = transports.streambase(socket, options);
+                self = transports.streambase(socket, options);
             
             if (!XDomainRequest || !options.xdrURL) {
                 return;
             }
             
-            transport.open = function() {
+            self.open = function() {
                 var index, 
                     length, 
-                    self = this, 
-                    url = options.xdrURL.call(socket, support.url(options.url, {id: options.id, when: "open", transport: "streamxdr", heartbeat: options.heartbeat}));
+                    url = options.xdrURL.call(socket, self.uri.open());
                 
                 xdr = new XDomainRequest();
                 xdr.onprogress = function() {
@@ -1453,17 +1462,17 @@
                 xdr.open("GET", url);
                 xdr.send();
             };
-            transport.abort = function() {
+            self.abort = function() {
                 xdr.abort();
             };
-            return transport;
+            return self;
         },
         // Streaming - Iframe
         streamiframe: function(socket, options) {
             var doc,
                 stop,
                 ActiveXObject = window.ActiveXObject,
-                transport = transports.streambase(socket, options);
+                self = transports.streambase(socket, options);
             
             if (!ActiveXObject || options.crossDomain) {
                 return;
@@ -1476,10 +1485,10 @@
                 }
             }
             
-            transport.open = function() {
-                var iframe, cdoc,
-                    self = this,
-                    url = support.url(options.url, {id: options.id, when: "open", transport: "streamiframe", heartbeat: options.heartbeat});
+            self.open = function() {
+                var iframe, 
+                    cdoc,
+                    url = self.uri.open();
                 
                 function iterate(fn) {
                     var timeoutId;
@@ -1549,16 +1558,22 @@
                     return false;
                 });
             };
-            transport.abort = function() {
+            self.abort = function() {
                 stop();
                 doc.execCommand("Stop");
             };
-            return transport;
+            return self;
         },
         // Long polling Base
         longpollbase: function(socket, options) {
-            var transport = transports.httpbase(socket, options);
-            transport.parse = function(data) {
+            var self = transports.httpbase(socket, options);
+            self.uri.poll = function(lastEventIds) {
+                return support.url(options.url, {id: options.id, when: "poll", lastEventIds: (lastEventIds || []).join(",")});
+            };
+            self.open = function() {
+                self.connect(self.uri.open(), true);
+            };
+            self.parse = function(data) {
                 var eventIds = [], 
                     obj = support.parseJSON(data), 
                     array = !support.isArray(obj) ? [obj] : obj;
@@ -1566,36 +1581,30 @@
                 support.each(array, function(i, event) {
                     eventIds.push(event.id);
                 });
-                this.connect({id: options.id, when: "poll", lastEventIds: eventIds.join(",")});
+                self.connect(self.uri.poll(eventIds));
                 support.each(array, function(i, event) {
                     socket._fire(support.stringifyJSON(event));
                 });
             };
-            return transport;
+            return self;
         },
         // Long polling - AJAX
         longpollajax: function(socket, options) {
             var xhr,
-                transport = transports.longpollbase(socket, options);
+                self = transports.longpollbase(socket, options);
             
             if (options.crossDomain && !support.corsable) {
                 return;
             }
             
-            transport.open = function() {
-                this.connect({id: options.id, when: "open", transport: "longpollajax", heartbeat: options.heartbeat});
-            };
-            transport.connect = function(params) {
-                var self = this, 
-                    url = support.url(options.url, params);
-                
+            self.connect = function(url, open) {
                 xhr = support.xhr();
                 xhr.onreadystatechange = function() {
                     // Avoids c00c023f error on Internet Explorer 9
                     if (xhr.readyState === 4) {
                         if (xhr.status === 200) {
-                            if (params.when === "open") {
-                                self.connect({id: options.id, when: "poll", lastEventIds: ""});
+                            if (open) {
+                                self.connect(self.uri.poll());
                                 socket.fire("open");
                             } else {
                                 var data = xhr.responseText;
@@ -1616,31 +1625,27 @@
                 }
                 xhr.send(null);
             };
-            transport.abort = function() {
+            self.abort = function() {
                 xhr.abort();
             };
-            return transport;
+            return self;
         },
         // Long polling - XDomainRequest
         longpollxdr: function(socket, options) {
             var xdr,
                 XDomainRequest = window.XDomainRequest,
-                transport = transports.longpollbase(socket, options);
+                self = transports.longpollbase(socket, options);
             
             if (!XDomainRequest || !options.xdrURL) {
                 return;
             }
-            
-            transport.open = function() {
-                this.connect({id: options.id, when: "open", transport: "longpollxdr", heartbeat: options.heartbeat});
-            };
-            transport.connect = function(params) {
-                var self = this, url = options.xdrURL.call(socket, support.url(options.url, params));
-                
+
+            self.connect = function(url, open) {
+                url = options.xdrURL.call(socket, url);
                 xdr = new XDomainRequest();
                 xdr.onload = function() {
-                    if (params.when === "open") {
-                        self.connect({id: options.id, when: "poll", lastEventIds: ""});
+                    if (open) {
+                        self.connect(self.uri.poll());
                         socket.fire("open");
                     } else {
                         var data = xdr.responseText;
@@ -1657,34 +1662,34 @@
                 xdr.open("GET", url);
                 xdr.send();
             };
-            transport.abort = function() {
+            self.abort = function() {
                 xdr.abort();
             };
-            return transport;
+            return self;
         },
         // Long polling - JSONP
         longpolljsonp: function(socket, options) {
             var script,
                 called,
-                transport = transports.longpollbase(socket, options);
+                callback = jsonpCallbacks.pop() || ("socket_" + (++guid)),
+                self = transports.longpollbase(socket, options);
             
-            transport.open = function() {
-                var self = this, callback = jsonpCallbacks.pop() || ("socket_" + (++guid));
-                // Attaches callback
-                window[callback] = function(data) {
-                    self.parse(data);
-                    called = true;
-                };
-                socket.one("close", function() {
-                    // Assings an empty function for browsers which are not able to cancel a request made from script tag
-                    window[callback] = function() {};
-                    jsonpCallbacks.push(callback);
-                });
-                self.connect({id: options.id, when: "open", transport: "longpolljsonp", heartbeat: options.heartbeat, callback: callback});
+            // Attaches callback
+            window[callback] = function(data) {
+                self.parse(data);
+                called = true;
             };
-            transport.connect = function(params) {
-                var self = this, url = support.url(options.url, params),
-                    head = document.head || document.getElementsByTagName("head")[0] || document.documentElement;
+            socket.one("close", function() {
+                // Assings an empty function for browsers which are not able to cancel a request made from script tag
+                window[callback] = function() {};
+                jsonpCallbacks.push(callback);
+            });
+            self.uri._open = self.uri.open;
+            self.uri.open = function() {
+                return self.uri._open.apply(self, arguments) + "&callback=" + callback;
+            };
+            self.connect = function(url, open) {
+                var head = document.head || document.getElementsByTagName("head")[0] || document.documentElement;
                 
                 script = document.createElement("script");
                 script.async = true;
@@ -1702,8 +1707,8 @@
                         if (script.clean) {
                             script.clean();
                         }
-                        if (params.when === "open") {
-                            self.connect({id: options.id, when: "poll", lastEventIds: ""});
+                        if (open) {
+                            self.connect(self.uri.poll());
                             socket.fire("open");
                         } else {
                             // window[callback] is executed before this listener
@@ -1721,12 +1726,12 @@
                 };
                 head.insertBefore(script, head.firstChild);                        
             };
-            transport.abort = function() {
+            self.abort = function() {
                 if (script.clean) {
                     script.clean();
                 }
             };
-            return transport;
+            return self;
         }
     };
     
