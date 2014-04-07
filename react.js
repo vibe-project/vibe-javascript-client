@@ -146,8 +146,6 @@
             eventId = 0,
             // Reply callbacks
             replyCallbacks = {},
-            // Buffer
-            buffer = [],
             // To check cross-origin
             parts = /^([\w\+\.\-]+:)(?:\/\/([^\/?#:]*)(?::(\d+))?)?/.exec(url.toLowerCase()),
             // Socket object
@@ -267,10 +265,8 @@
                 },
                 // Sends an event to the server via the connection
                 send: function(type, data, onResolved, onRejected) {
-                    // Defers sending an event until the state become opened
                     if (state !== "opened") {
-                        buffer.push(arguments);
-                        return this;
+                        throw new Error("A socket is not open yet");
                     }
                     
                     // Outbound event
@@ -587,11 +583,6 @@
                 
                 // Initializes variables related with reconnection
                 reconnectTimer = reconnectDelay = reconnectTry = null;
-                
-                // Flushes buffer
-                while (buffer.length) {
-                    self.send.apply(self, buffer.shift());
-                }
             },
             close: function() {
                 // From preparing, connecting, or opened state
