@@ -1238,47 +1238,33 @@
         },
         // HTTP Base
         httpbase: function(socket, options) {
-            var send,
-                sending,
-                queue = [],
-                self = transports.base(socket, options);
+            var self = transports.base(socket, options);
             
-            function post() {
-                if (queue.length) {
-                    send(options.url, queue.shift());
-                } else {
-                    sending = false;
-                }
-            }
-            
-            // The Content-Type is not application/x-www-form-urlencoded but text/plain on account of XDomainRequest
-            // See the fourth at http://blogs.msdn.com/b/ieinternals/archive/2010/05/13/xdomainrequest-restrictions-limitations-and-workarounds.aspx
-            send = !options.crossDomain || support.corsable ?
-            function(url, data) {
+            self.send = !options.crossDomain || support.corsable ?
+            // By XMLHttpRequest
+            function(data) {
                 var xhr = support.xhr();
-                xhr.onreadystatechange = function() {
-                    if (xhr.readyState === 4) {
-                        post();
-                    }
-                };
-                xhr.open("POST", url);
-                xhr.setRequestHeader("Content-Type", "text/plain; charset=UTF-8");
+                xhr.open("POST", options.url);
+                xhr.setRequestHeader("content-type", "text/plain; charset=UTF-8");
                 if (support.corsable) {
                     xhr.withCredentials = true;
                 }
                 xhr.send("data=" + data);
             } : window.XDomainRequest && options.xdrURL ?
-            function(url, data) {
+            // By XDomainRequest
+            function(data) {
+                // Only text/plain is supported for the request's Content-Type header
+                // from the fourth at http://blogs.msdn.com/b/ieinternals/archive/2010/05/13/xdomainrequest-restrictions-limitations-and-workarounds.aspx
                 var xdr = new window.XDomainRequest();
-                xdr.onload = xdr.onerror = post;
-                xdr.open("POST", options.xdrURL.call(socket, url));
+                xdr.open("POST", options.xdrURL.call(socket, options.url));
                 xdr.send("data=" + data);
             } :
-            function(url, data) {
+            // By HTMLFormElement
+            function(data) {
                 var iframe,
                     textarea,
                     form = document.createElement("form");
-                form.action = url;
+                form.action = options.url;
                 form.target = "socket-" + (++guid);
                 form.method = "POST";
                 // Internet Explorer 6 needs encoding property
@@ -1291,18 +1277,9 @@
                 iframe = form.lastChild;
                 support.on(iframe, "load", function() {
                     document.body.removeChild(form);
-                    post();
                 });
                 document.body.appendChild(form);
                 form.submit();
-            };
-            
-            self.send = function(data) {
-                queue.push(data);
-                if (!sending) {
-                    sending = true;
-                    post();
-                }
             };
             self.close = function() {
                 // Fires the close event immediately
