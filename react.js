@@ -12,7 +12,7 @@
 (function(root, factory) {
     if (typeof define === "function" && define.amd) {
         // AMD
-        define(function() {
+        define([], function() {
             return factory(root);
         });
     } else if (typeof exports === "object") {
