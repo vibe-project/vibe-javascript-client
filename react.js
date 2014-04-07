@@ -294,7 +294,7 @@
                         }
                     }
                     // Delegates to the transport
-                    transport.send(support.isBinary(data) || isSessionTransport ? data : support.stringifyJSON(event));
+                    transport.send(support.isBinary(data) ? data : support.stringifyJSON(event));
                     return this;
                 },
                 // Disconnects the connection
