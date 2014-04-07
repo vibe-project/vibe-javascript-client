@@ -230,39 +230,38 @@
                     // From null or waiting state
                     state = "preparing";
                     
+                    candidates = slice.call(opts.transports);
                     // Check if possible to make use of a shared socket
                     if (opts.sharing) {
-                        isSessionTransport = true;
-                        transport = transports.session(self, opts);
+                        candidates.unshift("session");
+                    }
+                    while (!transport && candidates.length) {
+                        type = candidates.shift();
+                        switch (type) {
+                        case "stream":
+                            candidates.unshift("sse", "streamxhr", "streamxdr", "streamiframe");
+                            break;
+                        case "longpoll":
+                            candidates.unshift("longpollajax", "longpollxdr", "longpolljsonp");
+                            break;
+                        default:
+                            // A transport instance will be null if it can't run on this environment
+                            transport = transports[type](self, opts);
+                            break;
+                        }
+                    }
+                    // Increases the number of reconnection attempts
+                    if (reconnectTry) {
+                        reconnectTry++;
+                    }
+                    // Fires the connecting event and connects
+                    if (transport) {
+                        opts.transport = type;
+                        isSessionTransport = type === "session";
+                        self.fire("connecting");
+                        transport.open();
                     } else {
-                        candidates = slice.call(opts.transports);
-                        while (!transport && candidates.length) {
-                            type = candidates.shift();
-                            switch (type) {
-                            case "stream":
-                                candidates.unshift("sse", "streamxhr", "streamxdr", "streamiframe");
-                                break;
-                            case "longpoll":
-                                candidates.unshift("longpollajax", "longpollxdr", "longpolljsonp");
-                                break;
-                            default:
-                                // A transport instance will be null if it can't run on this environment
-                                transport = transports[type](self, opts);
-                                break;
-                            }
-                        }
-                        // Increases the number of reconnection attempts
-                        if (reconnectTry) {
-                            reconnectTry++;
-                        }
-                        // Fires the connecting event and connects
-                        if (transport) {
-                            opts.transport = type;
-                            self.fire("connecting");
-                            transport.open();
-                        } else {
-                            self.fire("close", "notransport");
-                        }
+                        self.fire("close", "notransport");
                     }
                     return this;
                 },
