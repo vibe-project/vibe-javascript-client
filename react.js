@@ -303,7 +303,9 @@
                     opts.reconnect = false;
                     clearTimeout(reconnectTimer);
                     // Delegates to the transport
-                    transport.close();
+                    if (transport) {
+                        transport.close();
+                    }
                     return this;
                 },
                 // For internal use only
