@@ -266,7 +266,7 @@
                     return this;
                 },
                 // Sends an event to the server via the connection
-                send: function(type, data, doneCallback, failCallback) {
+                send: function(type, data, onResolved, onRejected) {
                     // Defers sending an event until the state become opened
                     if (state !== "opened") {
                         buffer.push(arguments);
@@ -274,21 +274,15 @@
                     }
                     
                     // Outbound event
-                    var event = {
-                            id: ++eventId,
-                            type: type,
-                            data: data,
-                            reply: !!(doneCallback || failCallback)
-                        };
-                    
+                    var event = {id: ++eventId, type: type, data: data, reply: !!(onResolved || onRejected)};
                     if (event.reply) {
                         // Shared socket needs to know the callback event name
                         // because it fires the callback event directly instead of using reply event
                         if (isSessionTransport) {
-                            event.doneCallback = doneCallback;
-                            event.failCallback = failCallback;
+                            event.onResolved = onResolved;
+                            event.onRejected = onRejected;
                         } else {
-                            replyCallbacks[eventId] = {done: doneCallback, fail: failCallback};
+                            replyCallbacks[eventId] = [onRejected, onResolved];
                         }
                     }
                     // Delegates to the transport
@@ -310,6 +304,7 @@
                 // receives an event from the server via the connection
                 receive: function(data) {
                     var latch, 
+                        // Inbound event
                         event = support.parseJSON(data), 
                         args = [event.type, event.data, !event.reply ? null : {
                             resolve: function(value) {
@@ -498,7 +493,7 @@
                         } else if (command.target === "p") {
                             switch (command.type) {
                             case "send":
-                                self.send(data.type, data.data, data.doneCallback, data.failCallback);
+                                self.send(data.type, data.data, data.onResolved, data.onRejected);
                                 break;
                             case "close":
                                 self.close();
@@ -635,20 +630,19 @@
                 var fn,
                     id = reply.id,
                     data = reply.data,
-                    exception = reply.exception,
                     callback = replyCallbacks[id];
                 
                 if (callback) {
-                    fn = exception ? callback.fail : callback.done;
+                    // callback is [onRejected, onResolved] and +false and + true is 0 and 1, respectively
+                    fn = callback[+reply.exception];
                     if (fn) {
                         if (support.isFunction(fn)) {
                             fn.call(self, data);
                         } else {
                             self.fire(fn, data).fire("_message", [fn, data]);
                         }
-                        
-                        delete replyCallbacks[id];
                     }
+                    delete replyCallbacks[id];
                 }
             }
         });
