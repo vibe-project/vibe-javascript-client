@@ -293,7 +293,7 @@
                         }
                     }
                     // Delegates to the transport
-                    transport.send(support.isBinary(data) ? data : support.stringifyJSON(event));
+                    transport.send(support.stringifyJSON(event));
                     return this;
                 },
                 // Disconnects the connection
@@ -308,19 +308,11 @@
                     return this;
                 },
                 // For internal use only
-                // fires events from the server
+                // accepts data from the transport
                 _fire: function(data) {
-                    var event, latch, args;
-                    
-                    if (support.isBinary(data)) {
-                        event = {type: "message", data: data};
-                    } else {
-                        event = support.parseJSON(data);
-                    }
-                    
-                    args = [event.type, event.data];
-                    if (event.reply) {
-                        args.push({
+                    var latch, 
+                        event = support.parseJSON(data), 
+                        args = [event.type, event.data, !event.reply ? null : {
                             resolve: function(value) {
                                 if (!latch) {
                                     latch = true;
@@ -333,11 +325,9 @@
                                     self.send("reply", {id: event.id, data: reason, exception: true});
                                 }
                             }
-                        });
-                    }
+                        }];
                     
-                    self.fire.apply(self, args).fire("_message", args);
-                    return this;
+                    return self.fire.apply(self, args).fire("_message", args);
                 }
             };
         
@@ -717,10 +707,6 @@
         },
         isArray: function(array) {
             return toString.call(array) === "[object Array]";
-        },
-        isBinary: function(data) {
-            // True if data is an instance of Blob, ArrayBuffer or ArrayBufferView 
-            return (/^\[object\s(?:Blob|ArrayBuffer|.+Array)\]$/).test(toString.call(data));
         },
         isFunction: function(fn) {
             return toString.call(fn) === "[object Function]";
