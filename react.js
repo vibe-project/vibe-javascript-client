@@ -307,8 +307,8 @@
                     return this;
                 },
                 // For internal use only
-                // accepts data from the transport
-                _fire: function(data) {
+                // receives an event from the server via the connection
+                receive: function(data) {
                     var latch, 
                         event = support.parseJSON(data), 
                         args = [event.type, event.data, !event.reply ? null : {
@@ -1203,7 +1203,7 @@
                     socket.fire("open");
                 };
                 ws.onmessage = function(event) {
-                    socket._fire(event.data);
+                    socket.receive(event.data);
                 };
                 ws.onerror = function() {
                     socket.fire("close", aborted ? "aborted" : "error");
@@ -1309,7 +1309,7 @@
                     socket.fire("open");
                 };
                 es.onmessage = function(event) {
-                    socket._fire(event.data);
+                    socket.receive(event.data);
                 };
                 es.onerror = function() {
                     es.close();
@@ -1339,7 +1339,7 @@
                         lines = (buffer + chunk).split("\n\n");
                     
                     for (i = 0; i < lines.length - 1; i++) {
-                        socket._fire(lines[i].substring("data: ".length));
+                        socket.receive(lines[i].substring("data: ".length));
                     }
                     buffer = lines[lines.length - 1];
                 }
@@ -1543,7 +1543,7 @@
                                 });
                                 poll(eventIds);
                                 support.each(array, function(i, event) {
-                                    socket._fire(support.stringifyJSON(event));
+                                    socket.receive(support.stringifyJSON(event));
                                 });
                             } else {
                                 socket.fire("close", "done");
