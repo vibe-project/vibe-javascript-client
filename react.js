@@ -276,7 +276,6 @@
                     // Outbound event
                     var event = {
                             id: ++eventId,
-                            socket: opts.id,
                             type: type,
                             data: data,
                             reply: !!(doneCallback || failCallback)
@@ -1224,13 +1223,14 @@
         },
         // HTTP Base
         httpbase: function(socket, options) {
-            var self = transports.base(socket, options);
+            var url = support.url(options.url, {id: options.id}),
+                self = transports.base(socket, options);
             
             self.send = !options.crossDomain || support.corsable ?
             // By XMLHttpRequest
             function(data) {
                 var xhr = support.xhr();
-                xhr.open("POST", options.url);
+                xhr.open("POST", url);
                 xhr.setRequestHeader("content-type", "text/plain; charset=UTF-8");
                 if (support.corsable) {
                     xhr.withCredentials = true;
@@ -1242,7 +1242,7 @@
                 // Only text/plain is supported for the request's Content-Type header
                 // from the fourth at http://blogs.msdn.com/b/ieinternals/archive/2010/05/13/xdomainrequest-restrictions-limitations-and-workarounds.aspx
                 var xdr = new window.XDomainRequest();
-                xdr.open("POST", options.xdrURL.call(socket, options.url));
+                xdr.open("POST", options.xdrURL.call(socket, url));
                 xdr.send("data=" + data);
             } :
             // By HTMLFormElement
@@ -1250,7 +1250,7 @@
                 var iframe,
                     textarea,
                     form = document.createElement("form");
-                form.action = options.url;
+                form.action = url;
                 form.target = "socket-" + (++guid);
                 form.method = "POST";
                 // Internet Explorer 6 needs encoding property
