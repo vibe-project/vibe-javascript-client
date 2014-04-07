@@ -152,10 +152,6 @@
             parts = /^([\w\+\.\-]+:)(?:\/\/([^\/?#:]*)(?::(\d+))?)?/.exec(url.toLowerCase()),
             // Socket object
             self = {
-                // Finds the value of an option
-                option: function(key) {
-                    return opts[key];
-                },
                 // Returns the state
                 state: function() {
                     return state;
