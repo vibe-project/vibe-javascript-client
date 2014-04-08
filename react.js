@@ -645,24 +645,20 @@
         },
         getAbsoluteURL: function(url) {
             var div = document.createElement("div");
-            
             // Uses an innerHTML property to obtain an absolute URL
             div.innerHTML = '<a href="' + url + '"/>';
-            
             // encodeURI and decodeURI are needed to normalize URL between Internet Explorer and non-Internet Explorer,
             // since Internet Explorer doesn't encode the href property value and return it - http://jsfiddle.net/Yq9M8/1/
             return encodeURI(decodeURI(div.firstChild.href));
         },
         each: function(array, callback) {
             var i;
-            
             for (i = 0; i < array.length; i++) {
                 callback(i, array[i]);
             }
         },
         extend: function(target) {
             var i, options, name;
-            
             for (i = 1; i < arguments.length; i++) {
                 if ((options = arguments[i]) != null) {
                     for (name in options) {
@@ -670,7 +666,6 @@
                     }
                 }
             }
-            
             return target;
         },
         on: function(elem, type, fn) {
@@ -687,44 +682,15 @@
                 elem.detachEvent("on" + type, fn);
             }
         },
-        param: function(params) {
-            var prefix, s = [];
-            
-            function add(key, value) {
-                value = support.isFunction(value) ? value() : (value == null ? "" : value);
-                s.push(encodeURIComponent(key) + "=" + encodeURIComponent(value));
-            }
-            
-            function buildParams(prefix, obj) {
-                var name;
-                
-                if (support.isArray(obj)) {
-                    support.each(obj, function(i, v) {
-                        if (/\[\]$/.test(prefix)) {
-                            add(prefix, v);
-                        } else {
-                            buildParams(prefix + "[" + (typeof v === "object" ? i : "") + "]", v);
-                        }
-                    });
-                } else if (obj != null && toString.call(obj) === "[object Object]") {
-                    for (name in obj) {
-                        buildParams(prefix + "[" + name + "]", obj[name]);
-                    }
-                } else {
-                    add(prefix, obj);
-                }
-            }
-            
-            for (prefix in params) {
-                buildParams(prefix, params[prefix]);
-            }
-            
-            return s.join("&").replace(/%20/g, "+");
-        },
         url: function(url, params) {
+            var name, s = [];
             params = params || {};
             params._ = guid++;
-            return url + (/\?/.test(url) ? "&" : "?") + support.param(params);
+            // params is supposed to be one-depth object
+            for (name in params) {
+                s.push(encodeURIComponent(name) + "=" + encodeURIComponent(params[name]));
+            }
+            return url + (/\?/.test(url) ? "&" : "?") + s.join("&").replace(/%20/g, "+");
         },
         xhr: function() {
             try {
