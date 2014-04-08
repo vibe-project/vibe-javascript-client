@@ -345,20 +345,19 @@
             
             var timeoutTimer;
             
-            // Sets timeout timer
-            function setTimeoutTimer() {
-                timeoutTimer = setTimeout(function() {
-                    transport.close();
-                    self.fire("close", "timeout");
-                }, opts.timeout);
-            }
-            
-            // Clears timeout timer
             function clearTimeoutTimer() {
                 clearTimeout(timeoutTimer);
             }
             
-            // Makes the socket sharable
+            // Sets a timeout timer and clear it on open or close event
+            if (opts.timeout > 0) {
+                timeoutTimer = setTimeout(function() {
+                    self.fire("close", "timeout");
+                    transport.close();
+                }, opts.timeout);
+                self.one("open", clearTimeoutTimer).one("close", clearTimeoutTimer);
+            }
+            
             function share() {
                 var traceTimer,
                     server,
@@ -518,13 +517,8 @@
                     self.off("_message", propagateMessageEvent);
                 });
             }
-            
-            if (opts.timeout > 0) {
-                setTimeoutTimer();
-                self.one("open", clearTimeoutTimer).one("close", clearTimeoutTimer);
-            }
-            
-            // Share the socket if possible
+
+            // Makes connection sharable  
             if (opts.sharing && !isSessionTransport) {
                 share();
             }
@@ -535,42 +529,43 @@
             
             var heartbeatTimer;
             
-            // Sets heartbeat timer
             function setHeartbeatTimer() {
+                // heartbeat event will be sent after opts.heartbeat - opts._heartbeat ms
                 heartbeatTimer = setTimeout(function() {
                     self.send("heartbeat").one("heartbeat", function() {
                         clearHeartbeatTimer();
                         setHeartbeatTimer();
                     });
-                    
+                    // transport will be closed after opts._heartbeat ms
+                    // unless the server responds it
                     heartbeatTimer = setTimeout(function() {
-                        transport.close();
                         self.fire("close", "error");
+                        transport.close();
                     }, opts._heartbeat);
                 }, opts.heartbeat - opts._heartbeat);
             }
             
-            // Clears heartbeat timer
             function clearHeartbeatTimer() {
                 clearTimeout(heartbeatTimer);
             }
             
+            // Sets a heartbeat timer and clears it on close event
             if (opts.heartbeat > opts._heartbeat) {
                 setHeartbeatTimer();
                 self.one("close", clearHeartbeatTimer);
             }
-            
             // Locks the connecting event
             events.connecting.lock();
-            
             // Initializes variables related with reconnection
             reconnectTimer = reconnectDelay = reconnectTry = null;
         })
         .close(function() {
-            // From preparing, connecting, or opened state
+            // From preparing, connecting or opened state
             state = "closed";
             
-            var type, event, order = events.close.order;
+            var type, 
+                event, 
+                order = events.close.order;
             
             // Locks event whose order is lower than close event
             for (type in events) {
@@ -579,13 +574,13 @@
                     event.lock();
                 }
             }
-            
             // Schedules reconnection
             if (opts.reconnect) {
+                // By adding a handler by one method in event handling
+                // it will be the last one of close event handlers having been added 
                 self.one("close", function() {
                     reconnectTry = reconnectTry || 1;
                     reconnectDelay = opts.reconnect.call(self, reconnectDelay, reconnectTry);
-                    
                     if (reconnectDelay !== false) {
                         reconnectTimer = setTimeout(function() {
                             self.open();
