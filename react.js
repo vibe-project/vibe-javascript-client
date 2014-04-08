@@ -328,11 +328,14 @@
             var r = Math.random() * 16 | 0, v = c === "x" ? r : (r & 0x3 | 0x8);
             return v.toString(16);
         });
-        opts.crossDomain = !!(parts &&
-            // protocol and hostname
-            (parts[1] != location.protocol || parts[2] != location.hostname ||
+        opts.crossOrigin = !!(parts && (
+            // protocol 
+            parts[1] != location.protocol ||
+            // hostname
+            parts[2] != location.hostname ||
             // port
-            (parts[3] || (parts[1] === "http:" ? 80 : 443)) != (location.port || (location.protocol === "http:" ? 80 : 443))));
+            (parts[3] || (parts[1] === "http:" ? 80 : 443)) != (location.port || (location.protocol === "http:" ? 80 : 443))
+        ));
         
         // Each event represents a possible state of this socket
         // they are considered as special event and works in a different way
@@ -1095,7 +1098,7 @@
             var url = support.url(options.url, {id: options.id}),
                 self = transports.base(socket, options);
             
-            self.send = !options.crossDomain || support.corsable ?
+            self.send = !options.crossOrigin || support.corsable ?
             // By XMLHttpRequest
             function(data) {
                 var xhr = support.xhr();
@@ -1217,7 +1220,7 @@
             var xhr,
                 self = transports.streambase(socket, options);
             
-            if ((support.browser.msie && +support.browser.version.split(".")[0] < 10) || (options.crossDomain && !support.corsable)) {
+            if ((support.browser.msie && +support.browser.version.split(".")[0] < 10) || (options.crossOrigin && !support.corsable)) {
                 return;
             }
             
@@ -1299,7 +1302,7 @@
                 ActiveXObject = window.ActiveXObject,
                 self = transports.streambase(socket, options);
             
-            if (!ActiveXObject || options.crossDomain) {
+            if (!ActiveXObject || options.crossOrigin) {
                 return;
             } else {
                 // Internet Explorer 10 Metro doesn't support ActiveXObject
@@ -1429,7 +1432,7 @@
             var xhr,
                 self = transports.longpollbase(socket, options);
             
-            if (options.crossDomain && !support.corsable) {
+            if (options.crossOrigin && !support.corsable) {
                 return;
             }
             
