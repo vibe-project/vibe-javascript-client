@@ -178,7 +178,7 @@
                     return this;
                 },
                 // Adds one time event handler
-                one: function(type, fn) {
+                once: function(type, fn) {
                     function proxy() {
                         self.off(type, proxy);
                         fn.apply(self, arguments);
@@ -361,7 +361,7 @@
                     self.fire("close", "timeout");
                     transport.close();
                 }, opts.timeout);
-                self.one("open", clearTimeoutTimer).one("close", clearTimeoutTimer);
+                self.once("open", clearTimeoutTimer).once("close", clearTimeoutTimer);
             }
             
             function share() {
@@ -391,10 +391,10 @@
                                     
                                     // Handles the storage event
                                     support.on(window, "storage", onstorage);
-                                    self.one("close", function() {
+                                    self.once("close", function() {
                                         support.off(window, "storage", onstorage);
                                         // Defers again to clean the storage
-                                        self.one("close", function() {
+                                        self.once("close", function() {
                                             storage.removeItem(name);
                                             storage.removeItem(name + "-opened");
                                             storage.removeItem(name + "-children");
@@ -509,11 +509,11 @@
                 traceTimer = setInterval(leaveTrace, 1000);
                 
                 self.on("_message", propagateMessageEvent)
-                .one("open", function() {
+                .once("open", function() {
                     server.set("opened", true);
                     server.broadcast({target: "c", type: "open"});
                 })
-                .one("close", function(reason) {
+                .once("close", function(reason) {
                     // Clears trace timer
                     clearInterval(traceTimer);
                     // Removes the trace
@@ -538,7 +538,7 @@
             function setHeartbeatTimer() {
                 // heartbeat event will be sent after opts.heartbeat - opts._heartbeat ms
                 heartbeatTimer = setTimeout(function() {
-                    self.send("heartbeat").one("heartbeat", function() {
+                    self.send("heartbeat").once("heartbeat", function() {
                         clearHeartbeatTimer();
                         setHeartbeatTimer();
                     });
@@ -558,7 +558,7 @@
             // Sets a heartbeat timer and clears it on close event
             if (opts.heartbeat > opts._heartbeat) {
                 setHeartbeatTimer();
-                self.one("close", clearHeartbeatTimer);
+                self.once("close", clearHeartbeatTimer);
             }
             // Locks the connecting event
             events.connecting.lock();
@@ -584,7 +584,7 @@
             if (opts.reconnect) {
                 // By adding a handler by one method in event handling
                 // it will be the last one of close event handlers having been added 
-                self.one("close", function() {
+                self.once("close", function() {
                     reconnectTry = reconnectTry || 1;
                     reconnectDelay = opts.reconnect.call(self, reconnectDelay, reconnectTry);
                     if (reconnectDelay !== false) {
@@ -893,7 +893,7 @@
                                 set("children", get("children").concat([options.id]));
                                 support.on(window, "storage", onstorage);
                                 
-                                socket.one("close", function() {
+                                socket.once("close", function() {
                                     var children = get("children");
                                     
                                     support.off(window, "storage", onstorage);
@@ -928,7 +928,7 @@
                                 win.callbacks.push(listener);
                                 win.children.push(options.id);
                                 
-                                socket.one("close", function() {
+                                socket.once("close", function() {
                                     // Removes traces only if the parent is alive
                                     if (!orphan) {
                                         removeFromArray(win.callbacks, listener);
@@ -993,7 +993,7 @@
                     case "message":
                         // When using the session transport, message events could be sent before the open event
                         if (socket.state() === "connecting") {
-                            socket.one("open", function() {
+                            socket.once("open", function() {
                                 socket.fire.apply(socket, data);
                             });
                         } else {
@@ -1045,7 +1045,7 @@
                     }, 1000);
                     
                     // Restores options
-                    socket.one("close", function() {
+                    socket.once("close", function() {
                         clearInterval(traceTimer);
                         options.timeout = timeout;
                         options.heartbeat = heartbeat;
@@ -1520,7 +1520,7 @@
             window[callback] = function(data) {
                 script.responseText = data;
             };
-            socket.one("close", function() {
+            socket.once("close", function() {
                 // Assings an empty function for browsers which are not able to cancel a request made from script tag
                 window[callback] = function() {};
                 jsonpCallbacks.push(callback);
