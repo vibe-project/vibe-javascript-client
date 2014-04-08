@@ -273,6 +273,9 @@
                     // Prevents reconnection
                     opts.reconnect = false;
                     clearTimeout(reconnectTimer);
+                    // Fires the close event immediately
+                    // unloading variable prevents those who use this connection from being aborted
+                    self.fire("close", unloading ? "error" : "aborted");
                     // Delegates to the transport
                     if (transport) {
                         transport.close();
@@ -337,7 +340,6 @@
                 return (support.isFunction(fn) ? on : old).apply(this, arguments);
             };
         });
-        
         // Initialization
         self.connecting(function() {
             // From preparing state
@@ -1119,7 +1121,6 @@
         // WebSocket
         ws: function(socket, options) {
             var ws,
-                aborted,
                 WebSocket = window.WebSocket,
                 self = transports.base(socket, options);
             
@@ -1140,17 +1141,16 @@
                     socket.receive(event.data);
                 };
                 ws.onerror = function() {
-                    socket.fire("close", aborted ? "aborted" : "error");
+                    socket.fire("close", "error");
                 };
                 ws.onclose = function(event) {
-                    socket.fire("close", aborted ? "aborted" : event.wasClean ? "done" : "error");
+                    socket.fire("close", event.wasClean ? "done" : "error");
                 };
             };
             self.send = function(data) {
                 ws.send(data);
             };
             self.close = function() {
-                aborted = true;
                 ws.close();
             };
             return self;
@@ -1202,9 +1202,6 @@
                 form.submit();
             };
             self.close = function() {
-                // Fires the close event immediately
-                // unloading variable prevents those who use this connection from being aborted
-                socket.fire("close", unloading ? "error" : "aborted");
                 // Aborts the real connection
                 self.abort();
                 // Sends the abort request to the server
