@@ -43,8 +43,6 @@
         react,
         // Convenience utilities
         support,
-        // Default options
-        defaults,
         // Transports
         transports,
         // Socket instances
@@ -130,9 +128,7 @@
     
     // Socket function
     function socket(url, options) {
-        var // Final options
-            opts,
-            // Transport
+        var // Transport
             transport,
             isSessionTransport,
             // The state of the connection
@@ -147,6 +143,17 @@
             replyCallbacks = {},
             // To check cross-origin
             parts = /^([\w\+\.\-]+:)(?:\/\/([^\/?#:]*)(?::(\d+))?)?/.exec(url.toLowerCase()),
+            // Final options
+            opts = {
+                transports: ["ws", "stream", "longpoll"],
+                timeout: false,
+                heartbeat: false,
+                _heartbeat: 5000,
+                sharing: false,
+                reconnect: function(lastDelay) {
+                    return 2 * (lastDelay || 250);
+                }
+            },
             // Socket object
             self = {
                 // Returns the state
@@ -304,19 +311,18 @@
                     
                     return self.fire.apply(self, args).fire("_message", args);
                 }
-            };
+            },
+            i;
         
-        // Create the final options
-        opts = support.extend({}, defaults, options);
+        // Overrides default options
         if (options) {
-            // Array should not be deep extended
-            if (options.transports) {
-                opts.transports = slice.call(options.transports);
+            for (i in options) {
+                opts[i] = options[i];
             }
         }
-        // Saves original URL
+        // Strictly speaking, the following values are not option
+        // but assigns them to opts for convenience of transport
         opts.url = url;
-        // Generates a random UUID as a socket id
         // Logic borrowed from http://stackoverflow.com/questions/105034/how-to-create-a-guid-uuid-in-javascript/2117523#2117523
         opts.id = "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, function(c) {
             var r = Math.random() * 16 | 0, v = c === "x" ? r : (r & 0x3 | 0x8);
@@ -660,17 +666,6 @@
                 callback(i, array[i]);
             }
         },
-        extend: function(target) {
-            var i, options, name;
-            for (i = 1; i < arguments.length; i++) {
-                if ((options = arguments[i]) != null) {
-                    for (name in options) {
-                        target[name] = options[name];
-                    }
-                }
-            }
-            return target;
-        },
         on: function(elem, type, fn) {
             if (elem.addEventListener) {
                 elem.addEventListener(type, fn, false);
@@ -841,20 +836,6 @@
         
         support.browser = browser;
     })(window.navigator.userAgent.toLowerCase());
-    
-    react.defaults = defaults = {
-        transports: ["ws", "stream", "longpoll"],
-        timeout: false,
-        heartbeat: false,
-        _heartbeat: 5000,
-        sharing: false,
-        reconnect: function(lastDelay) {
-            return 2 * (lastDelay || 250);
-        }
-        // See the fifth at http://blogs.msdn.com/b/ieinternals/archive/2010/05/13/xdomainrequest-restrictions-limitations-and-workarounds.aspx
-        // and http://stackoverflow.com/questions/6453779/maintaining-session-by-rewriting-url
-        // xdrURL: function(url) {return url_with_credentials}
-    };
     
     react.transports = transports = {
         // Session socket for connection sharing
