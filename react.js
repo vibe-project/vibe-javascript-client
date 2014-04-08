@@ -183,7 +183,7 @@
                         fn.apply(self, arguments);
                     }
                     
-                    fn.guid = fn.guid || ++guid;
+                    fn.guid = fn.guid || guid++;
                     proxy.guid = fn.guid;
                     return self.on(type, proxy);
                 },
@@ -252,7 +252,7 @@
                     }
                     
                     // Outbound event
-                    var event = {id: ++guid, type: type, data: data, reply: !!(onResolved || onRejected)};
+                    var event = {id: guid++, type: type, data: data, reply: !!(onResolved || onRejected)};
                     if (event.reply) {
                         // Shared socket needs to know the callback event name
                         // because it fires the callback event directly instead of using reply event
@@ -1146,7 +1146,7 @@
                     textarea,
                     form = document.createElement("form");
                 form.action = url;
-                form.target = "socket-" + (++guid);
+                form.target = "socket-" + (guid++);
                 form.method = "POST";
                 // Internet Explorer 6 needs encoding property
                 form.enctype = form.encoding = "text/plain";
@@ -1512,7 +1512,7 @@
         // Long polling - JSONP
         longpolljsonp: function(socket, options) {
             var script,
-                callback = jsonpCallbacks.pop() || ("socket_" + (++guid)),
+                callback = jsonpCallbacks.pop() || ("socket_" + (guid++)),
                 self = transports.longpollbase(socket, options);
             
             // Attaches callback
