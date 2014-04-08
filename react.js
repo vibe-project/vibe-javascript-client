@@ -143,7 +143,6 @@
             reconnectTry,
             // Event helpers
             events = {},
-            eventId = 0,
             // Reply callbacks
             replyCallbacks = {},
             // To check cross-origin
@@ -184,7 +183,7 @@
                         fn.apply(self, arguments);
                     }
                     
-                    fn.guid = fn.guid || guid++;
+                    fn.guid = fn.guid || ++guid;
                     proxy.guid = fn.guid;
                     return self.on(type, proxy);
                 },
@@ -253,7 +252,7 @@
                     }
                     
                     // Outbound event
-                    var event = {id: ++eventId, type: type, data: data, reply: !!(onResolved || onRejected)};
+                    var event = {id: ++guid, type: type, data: data, reply: !!(onResolved || onRejected)};
                     if (event.reply) {
                         // Shared socket needs to know the callback event name
                         // because it fires the callback event directly instead of using reply event
@@ -261,7 +260,7 @@
                             event.onResolved = onResolved;
                             event.onRejected = onRejected;
                         } else {
-                            replyCallbacks[eventId] = [onResolved, onRejected];
+                            replyCallbacks[event.id] = [onResolved, onRejected];
                         }
                     }
                     // Delegates to the transport
