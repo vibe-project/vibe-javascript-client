@@ -1431,17 +1431,18 @@
                     function poll(eventIds) {
                         self.connect(self.uri.poll(eventIds), function(data) {
                             if (data) {
-                                var eventIds = [], 
+                                var i,
+                                    eventIds = [], 
                                     obj = support.parseJSON(data), 
                                     array = !support.isArray(obj) ? [obj] : obj;
-                                
-                                support.each(array, function(i, event) {
-                                    eventIds.push(event.id);
-                                });
+                                    
+                                for (i = 0; i < array.length; i++) {
+                                    eventIds.push(array[i].id);
+                                }
                                 poll(eventIds);
-                                support.each(array, function(i, event) {
-                                    socket.receive(support.stringifyJSON(event));
-                                });
+                                for (i = 0; i < array.length; i++) {
+                                    socket.receive(support.stringifyJSON(array[i]));
+                                }
                             } else {
                                 socket.fire("close", "done");
                             }
