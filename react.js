@@ -646,7 +646,7 @@
     // Most utility functions are borrowed from jQuery
     react.support = support = {
         now: function() {
-            return new Date().getTime();
+            return +(new Date());
         },
         isArray: function(array) {
             return toString.call(array) === "[object Array]";
