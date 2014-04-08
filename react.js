@@ -317,8 +317,12 @@
         }
         // Saves original URL
         opts.url = url;
-        // Generates socket id,
-        opts.id = support.uuid();
+        // Generates a random UUID as a socket id
+        // Logic borrowed from http://stackoverflow.com/questions/105034/how-to-create-a-guid-uuid-in-javascript/2117523#2117523
+        opts.id = "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, function(c) {
+            var r = Math.random() * 16 | 0, v = c === "x" ? r : (r & 0x3 | 0x8);
+            return v.toString(16);
+        });
         opts.crossDomain = !!(parts &&
             // protocol and hostname
             (parts[1] != location.protocol || parts[2] != location.hostname ||
@@ -624,7 +628,7 @@
         // Creates a new socket and connects to the given url
         open: function(url, options) {
             // Makes url absolute to normalize URL
-            url = support.getAbsoluteURL(url);
+            url = support.makeAbsolute(url);
             // Opens a new socket
             var sock = socket(url, options);
             sockets.push(sock);
@@ -643,7 +647,7 @@
         isFunction: function(fn) {
             return toString.call(fn) === "[object Function]";
         },
-        getAbsoluteURL: function(url) {
+        makeAbsolute: function(url) {
             var div = document.createElement("div");
             // Uses an innerHTML property to obtain an absolute URL
             div.innerHTML = '<a href="' + url + '"/>';
@@ -783,14 +787,6 @@
                         }
                     }
                 })("", {"": value});
-        },
-        uuid: function() {
-            // Generates a random UUID
-            // Logic borrowed from http://stackoverflow.com/questions/105034/how-to-create-a-guid-uuid-in-javascript/2117523#2117523
-            return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, function(c) {
-                var r = Math.random() * 16 | 0, v = c === "x" ? r : (r & 0x3 | 0x8);
-                return v.toString(16);
-            });
         }
     };
     guid = support.now();
