@@ -261,7 +261,7 @@
                             event.onResolved = onResolved;
                             event.onRejected = onRejected;
                         } else {
-                            replyCallbacks[eventId] = [onRejected, onResolved];
+                            replyCallbacks[eventId] = [onResolved, onRejected];
                         }
                     }
                     // Delegates to the transport
@@ -603,7 +603,7 @@
                 callback = replyCallbacks[id];
             
             if (callback) {
-                // callback is [onRejected, onResolved] and +false and + true is 0 and 1, respectively
+                // callback is [onResolved, onRejected] and +false and + true is 0 and 1, respectively
                 fn = callback[+reply.exception];
                 if (fn) {
                     if (support.isFunction(fn)) {
