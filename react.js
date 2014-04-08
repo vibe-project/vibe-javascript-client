@@ -48,7 +48,7 @@
         // Transports
         transports,
         // Socket instances
-        sockets = {},
+        sockets = [],
         // Callback names for JSONP
         jsonpCallbacks = [],
         // Core prototypes
@@ -647,7 +647,10 @@
         open: function(url, options) {
             // Makes url absolute to normalize URL
             url = support.getAbsoluteURL(url);
-            return sockets[url] = socket(url, options);
+            // Opens a new socket
+            var sock = socket(url, options);
+            sockets.push(sock);
+            return sock; 
         }
     };
     
@@ -850,10 +853,9 @@
     support.corsable = "withCredentials" in support.xhr();
     support.on(window, "unload", function() {
         unloading = true;
-        
-        var url, socket;
-        for (url in sockets) {
-            socket = sockets[url];
+        var i, socket;
+        for (i = 0; i < sockets.length; i++) {
+            socket = sockets[i];
         	// Closes a socket as the document is unloaded
             if (socket.state() !== "closed") {
                 socket.close();
@@ -861,10 +863,9 @@
         }
     });
     support.on(window, "online", function() {
-        var url, socket;
-        
-        for (url in sockets) {
-            socket = sockets[url];
+        var i, socket;
+        for (i = 0; i < sockets.length; i++) {
+            socket = sockets[i];
             // Opens a socket because of no reason to wait
             if (socket.state() === "waiting") {
                 socket.open();
@@ -872,10 +873,9 @@
         }
     });
     support.on(window, "offline", function() {
-        var url, socket;
-        
-        for (url in sockets) {
-            socket = sockets[url];
+        var i, socket;
+        for (i = 0; i < sockets.length; i++) {
+            socket = sockets[i];
             // Fires a close event immediately
             if (socket.state() === "opened") {
                 socket.fire("close", "error");
