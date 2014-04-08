@@ -647,26 +647,7 @@
         open: function(url, options) {
             // Makes url absolute to normalize URL
             url = support.getAbsoluteURL(url);
-            sockets[url] = socket(url, options);
-            
-            return react.find(url);
-        },
-        // Finds the socket object which is mapped to the given url
-        find: function(url) {
-            var i;
-            
-            // Returns the first socket in the document
-            if (!arguments.length) {
-                for (i in sockets) {
-                    if (sockets[i]) {
-                        return sockets[i];
-                    }
-                }
-                return null;
-            }
-            
-            // The url is a identifier of this socket within the document
-            return sockets[support.getAbsoluteURL(url)] || null;
+            return sockets[url] = socket(url, options);
         },
         // Closes all sockets
         finalize: function() {
