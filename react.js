@@ -334,23 +334,22 @@
             // port
             (parts[3] || (parts[1] === "http:" ? 80 : 443)) != (location.port || (location.protocol === "http:" ? 80 : 443))));
         
-        support.each(["connecting", "open", "message", "close", "waiting"], function(i, type) {
-            // Creates event helper
-            events[type] = callbacks(type !== "message");
-            events[type].order = i;
-            
-            // Shortcuts for on method
-            var old = self[type],
-                on = function(fn) {
-                    return self.on(type, fn);
-                };
-            
-            self[type] = !old ? on : function(fn) {
-                return (support.isFunction(fn) ? on : old).apply(this, arguments);
-            };
-        });
-        // Initialization
-        self.connecting(function() {
+        // Each event represents a possible state of this socket
+        // they are considered as special event and works in a different way
+        for (i in {connecting: 1, open: 1, close: 1, waiting: 1}) {
+            // This event fires only one time and handlers being added after fire are fired immediately
+            events[i] = callbacks(true);
+            // State transition order
+            events[i].order = guid++;
+        }
+        // However all the other event including message event work as you expected
+        // it fires many times and handlers are executed whenever it fires
+        events.message = callbacks(false);
+        // It shares the same order with the open event because it can be fired when a socket is in the opened state
+        events.message.order = events.open.order;
+        
+        // Prepares the state transition
+        self.on("connecting", function() {
             // From preparing state
             state = "connecting";
             
@@ -534,7 +533,7 @@
                 share();
             }
         })
-        .open(function() {
+        .on("open", function() {
             // From connecting state
             state = "opened";
             
@@ -570,7 +569,26 @@
             // Initializes variables related with reconnection
             reconnectTimer = reconnectDelay = reconnectTry = null;
         })
-        .close(function() {
+        .on("reply", function(reply) {
+            var fn,
+                id = reply.id,
+                data = reply.data,
+                callback = replyCallbacks[id];
+            
+            if (callback) {
+                // callback is [onResolved, onRejected] and +false and + true is 0 and 1, respectively
+                fn = callback[+reply.exception];
+                if (fn) {
+                    if (support.isFunction(fn)) {
+                        fn.call(self, data);
+                    } else {
+                        self.fire(fn, data).fire("_message", [fn, data]);
+                    }
+                }
+                delete replyCallbacks[id];
+            }
+        })
+        .on("close", function() {
             // From preparing, connecting or opened state
             state = "closed";
             
@@ -601,28 +619,9 @@
                 });
             }
         })
-        .waiting(function() {
+        .on("waiting", function() {
             // From closed state
             state = "waiting";
-        })
-        .on("reply", function(reply) {
-            var fn,
-                id = reply.id,
-                data = reply.data,
-                callback = replyCallbacks[id];
-            
-            if (callback) {
-                // callback is [onResolved, onRejected] and +false and + true is 0 and 1, respectively
-                fn = callback[+reply.exception];
-                if (fn) {
-                    if (support.isFunction(fn)) {
-                        fn.call(self, data);
-                    } else {
-                        self.fire(fn, data).fire("_message", [fn, data]);
-                    }
-                }
-                delete replyCallbacks[id];
-            }
         });
         
         return self.open();
@@ -659,12 +658,6 @@
             // encodeURI and decodeURI are needed to normalize URL between Internet Explorer and non-Internet Explorer,
             // since Internet Explorer doesn't encode the href property value and return it - http://jsfiddle.net/Yq9M8/1/
             return encodeURI(decodeURI(div.firstChild.href));
-        },
-        each: function(array, callback) {
-            var i;
-            for (i = 0; i < array.length; i++) {
-                callback(i, array[i]);
-            }
         },
         on: function(elem, type, fn) {
             if (elem.addEventListener) {
