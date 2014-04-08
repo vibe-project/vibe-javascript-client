@@ -32,7 +32,7 @@
     }
 }(this, function(window) {
     
-    // Enables ECMAScript 5′s strict mode
+    // Enables ECMAScript 5's strict mode
     "use strict";
     
     var // A global identifier
