@@ -58,7 +58,7 @@
         location = window.location;
     
     // Callback function
-    function callbacks(deferred) {
+    function Callbacks(deferred) {
         var locked,
             memory,
             firing,
@@ -127,7 +127,7 @@
     }
     
     // Socket function
-    function socket(url, options) {
+    function Socket(url, options) {
         var // Transport
             transport,
             isSessionTransport,
@@ -140,7 +140,7 @@
             // Event helpers
             events = {},
             // Reply callbacks
-            replyCallbacks = {},
+            callbacks = {},
             // To check cross-origin
             parts = /^([\w\+\.\-]+:)(?:\/\/([^\/?#:]*)(?::(\d+))?)?/.exec(url.toLowerCase()),
             // Final options
@@ -169,7 +169,7 @@
                         if (events.message.locked()) {
                             return this;
                         }
-                        event = events[type] = callbacks();
+                        event = events[type] = Callbacks();
                         event.order = events.message.order;
                     }
                     event.add(fn);
@@ -267,7 +267,7 @@
                             event.onResolved = onResolved;
                             event.onRejected = onRejected;
                         } else {
-                            replyCallbacks[event.id] = [onResolved, onRejected];
+                            callbacks[event.id] = [onResolved, onRejected];
                         }
                     }
                     // Delegates to the transport
@@ -341,13 +341,13 @@
         // they are considered as special event and works in a different way
         for (i in {connecting: 1, open: 1, close: 1, waiting: 1}) {
             // This event fires only one time and handlers being added after fire are fired immediately
-            events[i] = callbacks(true);
+            events[i] = Callbacks(true);
             // State transition order
             events[i].order = guid++;
         }
         // However all the other event including message event work as you expected
         // it fires many times and handlers are executed whenever it fires
-        events.message = callbacks(false);
+        events.message = Callbacks(false);
         // It shares the same order with the open event because it can be fired when a socket is in the opened state
         events.message.order = events.open.order;
         
@@ -576,7 +576,7 @@
             var fn,
                 id = reply.id,
                 data = reply.data,
-                callback = replyCallbacks[id];
+                callback = callbacks[id];
             
             if (callback) {
                 // callback is [onResolved, onRejected] and +false and + true is 0 and 1, respectively
@@ -588,7 +588,7 @@
                         self.fire(fn, data).fire("_message", [fn, data]);
                     }
                 }
-                delete replyCallbacks[id];
+                delete callbacks[id];
             }
         })
         .on("close", function() {
@@ -637,9 +637,9 @@
             // Makes url absolute to normalize URL
             url = support.makeAbsolute(url);
             // Opens a new socket
-            var sock = socket(url, options);
-            sockets.push(sock);
-            return sock; 
+            var socket = Socket(url, options);
+            sockets.push(socket);
+            return socket; 
         }
     };
     
