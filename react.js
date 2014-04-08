@@ -648,20 +648,6 @@
             // Makes url absolute to normalize URL
             url = support.getAbsoluteURL(url);
             return sockets[url] = socket(url, options);
-        },
-        // Closes all sockets
-        finalize: function() {
-            var url, socket;
-            
-            for (url in sockets) {
-                socket = sockets[url];
-                if (socket.state() !== "closed") {
-                    socket.close();
-                }
-                
-                // To run the test suite
-                delete sockets[url];
-            }
         }
     };
     
@@ -863,17 +849,23 @@
     guid = support.now();
     support.corsable = "withCredentials" in support.xhr();
     support.on(window, "unload", function() {
-        // Check the unload event is fired by the browser
         unloading = true;
-        // Closes all sockets when the document is unloaded
-        react.finalize();
+        
+        var url, socket;
+        for (url in sockets) {
+            socket = sockets[url];
+        	// Closes a socket as the document is unloaded
+            if (socket.state() !== "closed") {
+                socket.close();
+            }
+        }
     });
     support.on(window, "online", function() {
         var url, socket;
         
         for (url in sockets) {
             socket = sockets[url];
-            // There is no reason to wait
+            // Opens a socket because of no reason to wait
             if (socket.state() === "waiting") {
                 socket.open();
             }
@@ -884,7 +876,7 @@
         
         for (url in sockets) {
             socket = sockets[url];
-            // Closes sockets which cannot detect disconnection manually
+            // Fires a close event immediately
             if (socket.state() === "opened") {
                 socket.fire("close", "error");
             }
