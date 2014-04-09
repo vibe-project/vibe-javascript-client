@@ -14,7 +14,7 @@
         
         // A vanilla form of long polling
         (function poll() {
-            var xhr = react.support.xhr();
+            var xhr = react.util.xhr();
             xhr.onreadystatechange = function() {
                 if (xhr.readyState === 4 && xhr.status === 200) {
                     // As a new test begins, close a previous connection
@@ -22,7 +22,7 @@
                         socket.close();
                     }
                     
-                    var params = react.support.parseJSON(xhr.responseText);
+                    var params = react.util.parseJSON(xhr.responseText);
                     
                     if (!crossOrigin) {
                         params.uri = "/react";
@@ -44,8 +44,8 @@
                                 can = !!window.XDomainRequest;
                                 break;
                             case "streamxhr":
-                                can = (!react.support.browser.msie || (+react.support.browser.version.split(".")[0] >= 10)) && 
-                                        (!crossOrigin || react.support.corsable)
+                                can = (!react.util.browser.msie || (+react.util.browser.version.split(".")[0] >= 10)) && 
+                                        (!crossOrigin || react.util.corsable)
                                 break;
                             case "streamiframe":
                                 if (window.ActiveXObject && !crossOrigin) {
@@ -55,7 +55,7 @@
                                 }
                                 break;
                             case "longpollajax":
-                                can = !crossOrigin || react.support.corsable;
+                                can = !crossOrigin || react.util.corsable;
                                 break;
                             case "longpollxdr":
                                 can = !!window.XDomainRequest;

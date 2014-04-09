@@ -17,15 +17,13 @@
         });
     } else if (typeof exports === "object") {
         // Node
-        module.exports = factory((function() {
-            // Prepare the window powered by jsdom
-            var window = require("jsdom").jsdom().createWindow();
-            window.WebSocket = require("ws");
-            window.EventSource = require("eventsource");
-            return window;
-        })());
+        // prepare the window object
+        var window = require("jsdom").jsdom().createWindow();
+        window.WebSocket = require("ws");
+        window.EventSource = require("eventsource");
+        module.exports = factory(window);
         // node-XMLHttpRequest 1.x conforms XMLHttpRequest Level 1 but can perform a cross-domain request
-        module.exports.support.corsable = true;
+        module.exports.util.corsable = true;
     } else {
         // Browser globals, Window
         root.react = factory(root);
@@ -36,28 +34,173 @@
     "use strict";
     
     var // A global identifier
-        guid,
+        guid = 1,
         // Is the unload event being processed?
         unloading,
-        // React
-        react,
-        // Convenience utilities
-        support,
-        // Transports
-        transports,
-        // Socket instances
-        sockets = [],
-        // Callback names for JSONP
-        jsonpCallbacks = [],
-        // Core prototypes
+        // Prototype shortcuts
+        slice = Array.prototype.slice,
         toString = Object.prototype.toString,
         hasOwn = Object.prototype.hasOwnProperty,
-        slice = Array.prototype.slice,
-        // Regard for Node since these are not defined
+        // Variables for Node
         document = window.document,
-        location = window.location;
+        location = window.location,
+        navigator = window.navigator,
+        // Utility functions
+        util;
+
+    // Most are inspired by jQuery
+    util = {
+        now: function() {
+            return +(new Date());
+        },
+        isArray: function(array) {
+            return toString.call(array) === "[object Array]";
+        },
+        isFunction: function(fn) {
+            return toString.call(fn) === "[object Function]";
+        },
+        makeAbsolute: function(url) {
+            var div = document.createElement("div");
+            // Uses an innerHTML property to obtain an absolute URL
+            div.innerHTML = '<a href="' + url + '"/>';
+            // encodeURI and decodeURI are needed to normalize URL between Internet Explorer and non-Internet Explorer,
+            // since Internet Explorer doesn't encode the href property value and return it - http://jsfiddle.net/Yq9M8/1/
+            return encodeURI(decodeURI(div.firstChild.href));
+        },
+        on: function(elem, type, fn) {
+            if (elem.addEventListener) {
+                elem.addEventListener(type, fn, false);
+            } else if (elem.attachEvent) {
+                elem.attachEvent("on" + type, fn);
+            }
+        },
+        off: function(elem, type, fn) {
+            if (elem.removeEventListener) {
+                elem.removeEventListener(type, fn, false);
+            } else if (elem.detachEvent) {
+                elem.detachEvent("on" + type, fn);
+            }
+        },
+        url: function(url, params) {
+            var name, s = [];
+            params = params || {};
+            params._ = guid++;
+            // params is supposed to be one-depth object
+            for (name in params) {
+                s.push(encodeURIComponent(name) + "=" + encodeURIComponent(params[name]));
+            }
+            return url + (/\?/.test(url) ? "&" : "?") + s.join("&").replace(/%20/g, "+");
+        },
+        xhr: function() {
+            try {
+                return new window.XMLHttpRequest();
+            } catch (e1) {
+                try {
+                    return new window.ActiveXObject("Microsoft.XMLHTTP");
+                } catch (e2) {}
+            }
+        },
+        parseJSON: window.JSON ? window.JSON.parse : function(data) {
+            return Function("return " + data)();
+        },
+        // http://github.com/flowersinthesand/stringifyJSON
+        stringifyJSON: window.JSON ? window.JSON.stringify : function(value) {
+            var escapable = /[\\\"\x00-\x1f\x7f-\x9f\u00ad\u0600-\u0604\u070f\u17b4\u17b5\u200c-\u200f\u2028-\u202f\u2060-\u206f\ufeff\ufff0-\uffff]/g,
+                meta = {
+                    '\b': '\\b',
+                    '\t': '\\t',
+                    '\n': '\\n',
+                    '\f': '\\f',
+                    '\r': '\\r',
+                    '"': '\\"',
+                    '\\': '\\\\'
+                };
+            
+            function quote(string) {
+                return '"' + string.replace(escapable, function(a) {
+                    var c = meta[a];
+                    return typeof c === "string" ? c : "\\u" + ("0000" + a.charCodeAt(0).toString(16)).slice(-4);
+                }) + '"';
+            }
+            
+            function f(n) {
+                return n < 10 ? "0" + n : n;
+            }
+            
+            return (function str(key, holder) {
+                    var i, v, len, partial, value = holder[key], type = typeof value;
+                            
+                    if (value && typeof value === "object" && typeof value.toJSON === "function") {
+                        value = value.toJSON(key);
+                        type = typeof value;
+                    }
+                    
+                    switch (type) {
+                    case "string":
+                        return quote(value);
+                    case "number":
+                        return isFinite(value) ? String(value) : "null";
+                    case "boolean":
+                        return String(value);
+                    case "object":
+                        if (!value) {
+                            return "null";
+                        }
+                        
+                        switch (toString.call(value)) {
+                        case "[object Date]":
+                            return isFinite(value.valueOf()) ?
+                                '"' + value.getUTCFullYear() + "-" + f(value.getUTCMonth() + 1) + "-" + f(value.getUTCDate()) +
+                                "T" + f(value.getUTCHours()) + ":" + f(value.getUTCMinutes()) + ":" + f(value.getUTCSeconds()) + "Z" + '"' :
+                                "null";
+                        case "[object Array]":
+                            len = value.length;
+                            partial = [];
+                            for (i = 0; i < len; i++) {
+                                partial.push(str(i, value) || "null");
+                            }
+                            
+                            return "[" + partial.join(",") + "]";
+                        default:
+                            partial = [];
+                            for (i in value) {
+                                if (hasOwn.call(value, i)) {
+                                    v = str(i, value);
+                                    if (v) {
+                                        partial.push(quote(i) + ":" + v);
+                                    }
+                                }
+                            }
+                            
+                            return "{" + partial.join(",") + "}";
+                        }
+                    }
+                })("", {"": value});
+        }
+    };
+    // CORS able
+    util.corsable = "withCredentials" in util.xhr();
+    // Browser sniffing
+    util.browser = (function() {
+        var ua = navigator.userAgent.toLowerCase(),
+            browser = {},
+            match =
+                // IE 6-10
+                /(msie) ([\w.]+)/.exec(ua) ||
+                // IE 11+
+                /(trident)(?:.*? rv:([\w.]+)|)/.exec(ua) || [];
+        
+        browser[match[1] || ""] = true;
+        browser.version = match[2] || "0";
+        // Trident is the layout engine of the Internet Explorer
+        if (browser.trident) {
+            browser.msie = true;
+        }
+        return browser;
+    })();
     
-    // Callback function
+    // Callbacks object
+    // inspired by jQuery.Callbacks
     function Callbacks(deferred) {
         var locked,
             memory,
@@ -126,8 +269,11 @@
         return self;
     }
     
-    // Socket function
+    // Socket object
     function Socket(url, options) {
+        // Makes url absolute to normalize URL
+        url = util.makeAbsolute(url);
+        
         // Options
         var i,
             // URI parts
@@ -268,7 +414,7 @@
                             var storage = window.localStorage;
                             // The storage event of Internet Explorer works strangely
                             // TODO test Internet Explorer 11
-                            if (support.browser.msie) {
+                            if (util.browser.msie) {
                                 return;
                             }
                             return {
@@ -280,9 +426,9 @@
                                         }
                                     }
                                     // Handles the storage event
-                                    support.on(window, "storage", onstorage);
+                                    util.on(window, "storage", onstorage);
                                     self.once("close", function() {
-                                        support.off(window, "storage", onstorage);
+                                        util.off(window, "storage", onstorage);
                                         // Defers again to clean the storage
                                         self.once("close", function() {
                                             storage.removeItem(name);
@@ -292,17 +438,17 @@
                                     });
                                 },
                                 broadcast: function(obj) {
-                                    var string = support.stringifyJSON(obj);
+                                    var string = util.stringifyJSON(obj);
                                     storage.setItem(name, string);
                                     setTimeout(function() {
                                         listener(string);
                                     }, 50);
                                 },
                                 get: function(key) {
-                                    return support.parseJSON(storage.getItem(name + "-" + key));
+                                    return util.parseJSON(storage.getItem(name + "-" + key));
                                 },
                                 set: function(key, value) {
-                                    storage.setItem(name + "-" + key, support.stringifyJSON(value));
+                                    storage.setItem(name + "-" + key, util.stringifyJSON(value));
                                 }
                             };
                         },
@@ -336,7 +482,7 @@
                                 },
                                 broadcast: function(obj) {
                                     if (!win.closed && win.fire) {
-                                        win.fire(support.stringifyJSON(obj));
+                                        win.fire(util.stringifyJSON(obj));
                                     }
                                 },
                                 get: function(key) {
@@ -353,7 +499,7 @@
                 
                 // Receives send and close command from the children
                 function listener(string) {
-                    var command = support.parseJSON(string), data = command.data;
+                    var command = util.parseJSON(string), data = command.data;
                     if (!command.target) {
                         if (command.type === "fire") {
                             self.fire(data.type, data.data);
@@ -376,7 +522,7 @@
                 
                 function leaveTrace() {
                     document.cookie = encodeURIComponent(name) + "=" +
-                        encodeURIComponent(support.stringifyJSON({ts: support.now(), heir: (server.get("children") || [])[0]})) +
+                        encodeURIComponent(util.stringifyJSON({ts: util.now(), heir: (server.get("children") || [])[0]})) +
                         "; path=/";
                 }
                 
@@ -575,7 +721,7 @@
                 }
             }
             // Delegates to the transport
-            transport.send(support.stringifyJSON(event));
+            transport.send(util.stringifyJSON(event));
             return this;
         };
         // For internal use only
@@ -583,7 +729,7 @@
         self.receive = function(data) {
             var latch, 
                 // Inbound event
-                event = support.parseJSON(data), 
+                event = util.parseJSON(data), 
                 args = [event.type, event.data, !event.reply ? null : {
                     resolve: function(value) {
                         if (!latch) {
@@ -613,7 +759,7 @@
                 // callback is [onResolved, onRejected] and +false and + true is 0 and 1, respectively
                 fn = callback[+reply.exception];
                 if (fn) {
-                    if (support.isFunction(fn)) {
+                    if (util.isFunction(fn)) {
                         fn.call(self, data);
                     } else {
                         self.fire(fn, data).fire("_message", [fn, data]);
@@ -625,211 +771,13 @@
         
         return self.open();
     }
-        
-    // Defines the react
-    react = {
-        // Creates a new socket and connects to the given url
-        open: function(url, options) {
-            // Makes url absolute to normalize URL
-            url = support.makeAbsolute(url);
-            // Opens a new socket
-            var socket = Socket(url, options);
-            sockets.push(socket);
-            return socket; 
-        }
-    };
+
+    // Transport object
+    var transports,
+        // Callback names used in longpolljsonp
+        jsonpCallbacks = [];
     
-    // Most utility functions are borrowed from jQuery
-    react.support = support = {
-        now: function() {
-            return +(new Date());
-        },
-        isArray: function(array) {
-            return toString.call(array) === "[object Array]";
-        },
-        isFunction: function(fn) {
-            return toString.call(fn) === "[object Function]";
-        },
-        makeAbsolute: function(url) {
-            var div = document.createElement("div");
-            // Uses an innerHTML property to obtain an absolute URL
-            div.innerHTML = '<a href="' + url + '"/>';
-            // encodeURI and decodeURI are needed to normalize URL between Internet Explorer and non-Internet Explorer,
-            // since Internet Explorer doesn't encode the href property value and return it - http://jsfiddle.net/Yq9M8/1/
-            return encodeURI(decodeURI(div.firstChild.href));
-        },
-        on: function(elem, type, fn) {
-            if (elem.addEventListener) {
-                elem.addEventListener(type, fn, false);
-            } else if (elem.attachEvent) {
-                elem.attachEvent("on" + type, fn);
-            }
-        },
-        off: function(elem, type, fn) {
-            if (elem.removeEventListener) {
-                elem.removeEventListener(type, fn, false);
-            } else if (elem.detachEvent) {
-                elem.detachEvent("on" + type, fn);
-            }
-        },
-        url: function(url, params) {
-            var name, s = [];
-            params = params || {};
-            params._ = guid++;
-            // params is supposed to be one-depth object
-            for (name in params) {
-                s.push(encodeURIComponent(name) + "=" + encodeURIComponent(params[name]));
-            }
-            return url + (/\?/.test(url) ? "&" : "?") + s.join("&").replace(/%20/g, "+");
-        },
-        xhr: function() {
-            try {
-                return new window.XMLHttpRequest();
-            } catch (e1) {
-                try {
-                    return new window.ActiveXObject("Microsoft.XMLHTTP");
-                } catch (e2) {}
-            }
-        },
-        parseJSON: function(data) {
-            return !data ?
-                null :
-                window.JSON && window.JSON.parse ?
-                    window.JSON.parse(data) :
-                    Function("return " + data)();
-        },
-        // http://github.com/flowersinthesand/stringifyJSON
-        stringifyJSON: function(value) {
-            var escapable = /[\\\"\x00-\x1f\x7f-\x9f\u00ad\u0600-\u0604\u070f\u17b4\u17b5\u200c-\u200f\u2028-\u202f\u2060-\u206f\ufeff\ufff0-\uffff]/g,
-                meta = {
-                    '\b': '\\b',
-                    '\t': '\\t',
-                    '\n': '\\n',
-                    '\f': '\\f',
-                    '\r': '\\r',
-                    '"': '\\"',
-                    '\\': '\\\\'
-                };
-            
-            function quote(string) {
-                return '"' + string.replace(escapable, function(a) {
-                    var c = meta[a];
-                    return typeof c === "string" ? c : "\\u" + ("0000" + a.charCodeAt(0).toString(16)).slice(-4);
-                }) + '"';
-            }
-            
-            function f(n) {
-                return n < 10 ? "0" + n : n;
-            }
-            
-            return window.JSON && window.JSON.stringify ?
-                window.JSON.stringify(value) :
-                (function str(key, holder) {
-                    var i, v, len, partial, value = holder[key], type = typeof value;
-                            
-                    if (value && typeof value === "object" && typeof value.toJSON === "function") {
-                        value = value.toJSON(key);
-                        type = typeof value;
-                    }
-                    
-                    switch (type) {
-                    case "string":
-                        return quote(value);
-                    case "number":
-                        return isFinite(value) ? String(value) : "null";
-                    case "boolean":
-                        return String(value);
-                    case "object":
-                        if (!value) {
-                            return "null";
-                        }
-                        
-                        switch (toString.call(value)) {
-                        case "[object Date]":
-                            return isFinite(value.valueOf()) ?
-                                '"' + value.getUTCFullYear() + "-" + f(value.getUTCMonth() + 1) + "-" + f(value.getUTCDate()) +
-                                "T" + f(value.getUTCHours()) + ":" + f(value.getUTCMinutes()) + ":" + f(value.getUTCSeconds()) + "Z" + '"' :
-                                "null";
-                        case "[object Array]":
-                            len = value.length;
-                            partial = [];
-                            for (i = 0; i < len; i++) {
-                                partial.push(str(i, value) || "null");
-                            }
-                            
-                            return "[" + partial.join(",") + "]";
-                        default:
-                            partial = [];
-                            for (i in value) {
-                                if (hasOwn.call(value, i)) {
-                                    v = str(i, value);
-                                    if (v) {
-                                        partial.push(quote(i) + ":" + v);
-                                    }
-                                }
-                            }
-                            
-                            return "{" + partial.join(",") + "}";
-                        }
-                    }
-                })("", {"": value});
-        }
-    };
-    guid = support.now();
-    support.corsable = "withCredentials" in support.xhr();
-    support.on(window, "unload", function() {
-        unloading = true;
-        var i, socket;
-        for (i = 0; i < sockets.length; i++) {
-            socket = sockets[i];
-        	// Closes a socket as the document is unloaded
-            if (socket.state() !== "closed") {
-                socket.close();
-            }
-        }
-    });
-    support.on(window, "online", function() {
-        var i, socket;
-        for (i = 0; i < sockets.length; i++) {
-            socket = sockets[i];
-            // Opens a socket because of no reason to wait
-            if (socket.state() === "waiting") {
-                socket.open();
-            }
-        }
-    });
-    support.on(window, "offline", function() {
-        var i, socket;
-        for (i = 0; i < sockets.length; i++) {
-            socket = sockets[i];
-            // Fires a close event immediately
-            if (socket.state() === "opened") {
-                socket.fire("close", "error");
-            }
-        }
-    });
-    // Browser sniffing
-    (function(ua) {
-        var browser = {},
-            match =
-                // IE 6-10
-                /(msie) ([\w.]+)/.exec(ua) ||
-                // IE 11+
-                /(trident)(?:.*? rv:([\w.]+)|)/.exec(ua) ||
-                [];
-        
-        browser[match[1] || ""] = true;
-        browser.version = match[2] || "0";
-        
-        // Trident is the layout engine of the Internet Explorer
-        if (browser.trident) {
-            browser.msie = true;
-        }
-        
-        support.browser = browser;
-    })(window.navigator.userAgent.toLowerCase());
-    
-    react.transports = transports = {
+    transports = {
         // Session socket for connection sharing
         // TODO review
         session: function(socket, options) {
@@ -841,18 +789,18 @@
                     storage: function() {
                         // The storage event of Internet Explorer works strangely
                         // TODO test Internet Explorer 11
-                        if (support.browser.msie) {
+                        if (util.browser.msie) {
                             return;
                         }
                         
                         var storage = window.localStorage;
                         
                         function get(key) {
-                            return support.parseJSON(storage.getItem(name + "-" + key));
+                            return util.parseJSON(storage.getItem(name + "-" + key));
                         }
                         
                         function set(key, value) {
-                            storage.setItem(name + "-" + key, support.stringifyJSON(value));
+                            storage.setItem(name + "-" + key, util.stringifyJSON(value));
                         }
                         
                         return {
@@ -864,12 +812,10 @@
                                 }
                                 
                                 set("children", get("children").concat([options.id]));
-                                support.on(window, "storage", onstorage);
-                                
+                                util.on(window, "storage", onstorage);
                                 socket.once("close", function() {
                                     var children = get("children");
-                                    
-                                    support.off(window, "storage", onstorage);
+                                    util.off(window, "storage", onstorage);
                                     if (children) {
                                         if (removeFromArray(children, options.id)) {
                                             set("children", children);
@@ -880,8 +826,7 @@
                                 return get("opened");
                             },
                             broadcast: function(obj) {
-                                var string = support.stringifyJSON(obj);
-                                
+                                var string = util.stringifyJSON(obj);
                                 storage.setItem(name, string);
                                 setTimeout(function() {
                                     listener(string);
@@ -895,12 +840,10 @@
                         if (!win || win.closed || !win.callbacks) {
                             return;
                         }
-                        
                         return {
                             init: function() {
                                 win.callbacks.push(listener);
                                 win.children.push(options.id);
-                                
                                 socket.once("close", function() {
                                     // Removes traces only if the parent is alive
                                     if (!orphan) {
@@ -913,7 +856,7 @@
                             },
                             broadcast: function(obj) {
                                 if (!win.closed && win.fire) {
-                                    win.fire(support.stringifyJSON(obj));
+                                    win.fire(util.stringifyJSON(obj));
                                 }
                             }
                         };
@@ -929,13 +872,12 @@
                         array.splice(i, 1);
                     }
                 }
-                
                 return length !== array.length;
             }
             
             // Receives open, close and message command from the parent
             function listener(string) {
-                var command = support.parseJSON(string), data = command.data;
+                var command = util.parseJSON(string), data = command.data;
                 
                 if (!command.target) {
                     if (command.type === "fire") {
@@ -980,13 +922,13 @@
             function findTrace() {
                 var matcher = new RegExp("(?:^|; )(" + encodeURIComponent(name) + ")=([^;]*)").exec(document.cookie);
                 if (matcher) {
-                    return support.parseJSON(decodeURIComponent(matcher[2]));
+                    return util.parseJSON(decodeURIComponent(matcher[2]));
                 }
             }
             
             // Finds and validates the parent socket's trace from the cookie
             trace = findTrace();
-            if (!trace || support.now() - trace.ts > 1000) {
+            if (!trace || util.now() - trace.ts > 1000) {
                 return;
             }
             
@@ -1005,25 +947,21 @@
                     
                     // Prevents side effects
                     options.timeout = options.heartbeat = false;
-                    
                     // Checks the shared one is alive
                     traceTimer = setInterval(function() {
                         var oldTrace = trace;
-                        
                         trace = findTrace();
                         if (!trace || oldTrace.ts === trace.ts) {
                             // Simulates a close signal
-                            listener(support.stringifyJSON({target: "c", type: "close", data: {reason: "error", heir: oldTrace.heir}}));
+                            listener(util.stringifyJSON({target: "c", type: "close", data: {reason: "error", heir: oldTrace.heir}}));
                         }
                     }, 1000);
-                    
                     // Restores options
                     socket.once("close", function() {
                         clearInterval(traceTimer);
                         options.timeout = timeout;
                         options.heartbeat = heartbeat;
                     });
-                    
                     parentOpened = connector.init();
                     if (parentOpened) {
                         // Gives the user the opportunity to bind connecting event handlers
@@ -1048,7 +986,7 @@
             var self = {};
             self.uri = {
                 open: function() {
-                    return support.url(options.url, {id: options.id, when: "open", transport: options.transport, heartbeat: options.heartbeat});
+                    return util.url(options.url, {id: options.id, when: "open", transport: options.transport, heartbeat: options.heartbeat});
                 }
             };
             return self;
@@ -1092,16 +1030,16 @@
         },
         // HTTP Base
         httpbase: function(socket, options) {
-            var url = support.url(options.url, {id: options.id}),
+            var url = util.url(options.url, {id: options.id}),
                 self = transports.base(socket, options);
             
-            self.send = !options.crossOrigin || support.corsable ?
+            self.send = !options.crossOrigin || util.corsable ?
             // By XMLHttpRequest
             function(data) {
-                var xhr = support.xhr();
+                var xhr = util.xhr();
                 xhr.open("POST", url);
                 xhr.setRequestHeader("content-type", "text/plain; charset=UTF-8");
-                if (support.corsable) {
+                if (util.corsable) {
                     xhr.withCredentials = true;
                 }
                 xhr.send("data=" + data);
@@ -1130,7 +1068,7 @@
                 textarea = form.firstChild;
                 textarea.value = data;
                 iframe = form.lastChild;
-                support.on(iframe, "load", function() {
+                util.on(iframe, "load", function() {
                     document.body.removeChild(form);
                 });
                 document.body.appendChild(form);
@@ -1144,7 +1082,7 @@
                 var script = document.createElement("script"),
                     head = document.head || document.getElementsByTagName("head")[0] || document.documentElement;
                 script.async = false;
-                script.src = support.url(options.url, {id: options.id, when: "abort"});
+                script.src = util.url(options.url, {id: options.id, when: "abort"});
                 script.onload = script.onreadystatechange = function() {
                     if (!script.readyState || /loaded|complete/.test(script.readyState)) {
                         script.onload = script.onreadystatechange = null;
@@ -1217,7 +1155,7 @@
             var xhr,
                 self = transports.streambase(socket, options);
             
-            if ((support.browser.msie && +support.browser.version.split(".")[0] < 10) || (options.crossOrigin && !support.corsable)) {
+            if ((util.browser.msie && +util.browser.version.split(".")[0] < 10) || (options.crossOrigin && !util.corsable)) {
                 return;
             }
             
@@ -1226,7 +1164,7 @@
                     length, 
                     url = self.uri.open();
                 
-                xhr = support.xhr();
+                xhr = util.xhr();
                 xhr.onreadystatechange = function() {
                     if (xhr.readyState === 3 && xhr.status === 200) {
                         length = xhr.responseText.length;
@@ -1242,7 +1180,7 @@
                     }
                 };
                 xhr.open("GET", url);
-                if (support.corsable) {
+                if (util.corsable) {
                     xhr.withCredentials = true;
                 }
                 xhr.send(null);
@@ -1393,7 +1331,7 @@
         longpollbase: function(socket, options) {
             var self = transports.httpbase(socket, options);
             self.uri.poll = function(eventIds) {
-                return support.url(options.url, {id: options.id, when: "poll", lastEventIds: eventIds.join(",")});
+                return util.url(options.url, {id: options.id, when: "poll", lastEventIds: eventIds.join(",")});
             };
             self.open = function() {
                 self.connect(self.uri.open(), function() {
@@ -1402,15 +1340,15 @@
                             if (data) {
                                 var i,
                                     eventIds = [], 
-                                    obj = support.parseJSON(data), 
-                                    array = !support.isArray(obj) ? [obj] : obj;
+                                    obj = util.parseJSON(data), 
+                                    array = !util.isArray(obj) ? [obj] : obj;
                                     
                                 for (i = 0; i < array.length; i++) {
                                     eventIds.push(array[i].id);
                                 }
                                 poll(eventIds);
                                 for (i = 0; i < array.length; i++) {
-                                    socket.receive(support.stringifyJSON(array[i]));
+                                    socket.receive(util.stringifyJSON(array[i]));
                                 }
                             } else {
                                 socket.fire("close", "done");
@@ -1429,12 +1367,12 @@
             var xhr,
                 self = transports.longpollbase(socket, options);
             
-            if (options.crossOrigin && !support.corsable) {
+            if (options.crossOrigin && !util.corsable) {
                 return;
             }
             
             self.connect = function(url, fn) {
-                xhr = support.xhr();
+                xhr = util.xhr();
                 xhr.onreadystatechange = function() {
                     // Avoids c00c023f error on Internet Explorer 9
                     if (xhr.readyState === 4) {
@@ -1446,7 +1384,7 @@
                     }
                 };
                 xhr.open("GET", url);
-                if (support.corsable) {
+                if (util.corsable) {
                     xhr.withCredentials = true;
                 }
                 xhr.send(null);
@@ -1538,6 +1476,55 @@
             return self;
         }
     };
+    
+    var // Defines the react
+        react = {},
+        // Socket instances
+        sockets = [];
+
+    // Creates a new socket and connects to the given url
+    react.open = function(url, options) {
+        // Opens a new socket
+        var socket = Socket(url, options);
+        sockets.push(socket);
+        return socket; 
+    };
+    // Exposes to help debug or apply hotfix but not public
+    react.util = util;
+    react.transports = transports;
+    
+    // For browser environment
+    util.on(window, "unload", function() {
+        unloading = true;
+        var i, socket;
+        for (i = 0; i < sockets.length; i++) {
+            socket = sockets[i];
+            // Closes a socket as the document is unloaded
+            if (socket.state() !== "closed") {
+                socket.close();
+            }
+        }
+    });
+    util.on(window, "online", function() {
+        var i, socket;
+        for (i = 0; i < sockets.length; i++) {
+            socket = sockets[i];
+            // Opens a socket because of no reason to wait
+            if (socket.state() === "waiting") {
+                socket.open();
+            }
+        }
+    });
+    util.on(window, "offline", function() {
+        var i, socket;
+        for (i = 0; i < sockets.length; i++) {
+            socket = sockets[i];
+            // Fires a close event immediately
+            if (socket.state() === "opened") {
+                socket.fire("close", "error");
+            }
+        }
+    });
     
     return react;
 }));
