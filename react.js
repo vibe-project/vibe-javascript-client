@@ -256,6 +256,7 @@
                 self.once("open", clearTimeoutTimer).once("close", clearTimeoutTimer);
             }
             
+            // TODO review
             function share() {
                 var traceTimer,
                     server,
@@ -830,6 +831,7 @@
     
     react.transports = transports = {
         // Session socket for connection sharing
+        // TODO review
         session: function(socket, options) {
             var trace,
                 orphan,
