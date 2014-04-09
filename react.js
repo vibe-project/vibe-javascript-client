@@ -50,10 +50,10 @@
 
     // Most are inspired by jQuery
     util = {
-        now: function() {
+        now: Date.now || function() {
             return +(new Date());
         },
-        isArray: function(array) {
+        isArray: Array.isArray || function(array) {
             return toString.call(array) === "[object Array]";
         },
         isFunction: function(fn) {
