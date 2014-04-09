@@ -28,7 +28,7 @@
     "url": "https://github.com/atmosphere/react-javascript-client/issues"
   },
   "dependencies": {
-    "jsdom": "0.10.4",
+    "jsdom": "0.10.5",
     "ws": "0.4.31",
     "eventsource": "0.1.0"
   },
