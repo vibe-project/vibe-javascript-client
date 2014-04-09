@@ -128,23 +128,12 @@
     
     // Socket function
     function Socket(url, options) {
-        var // Transport
-            transport,
-            isSessionTransport,
-            // The state of the connection
-            state,
-            // Reconnection
-            reconnectTimer,
-            reconnectDelay,
-            reconnectTry,
-            // Event helpers
-            events = {},
-            // Reply callbacks
-            callbacks = {},
-            // To check cross-origin
+        // Options
+        var i,
+            // URI parts
             parts = /^([\w\+\.\-]+:)(?:\/\/([^\/?#:]*)(?::(\d+))?)?/.exec(url.toLowerCase()),
-            // Final options
-            opts = {
+            // Default options
+            defaults = {
                 transports: ["ws", "stream", "longpoll"],
                 timeout: false,
                 heartbeat: false,
@@ -152,183 +141,28 @@
                 sharing: false,
                 reconnect: function(lastDelay) {
                     return 2 * (lastDelay || 250);
-                }
-            },
-            // Socket object
-            self = {
-                // Returns the state
-                state: function() {
-                    return state;
                 },
-                // Adds event handler
-                on: function(type, fn) {
-                    var event;
-                    // For custom event
-                    event = events[type];
-                    if (!event) {
-                        if (events.message.locked()) {
-                            return this;
-                        }
-                        event = events[type] = Callbacks();
-                        event.order = events.message.order;
-                    }
-                    event.add(fn);
-                    return this;
-                },
-                // Removes event handler
-                off: function(type, fn) {
-                    var event = events[type];
-                    if (event) {
-                        event.remove(fn);
-                    }
-                    return this;
-                },
-                // Adds one time event handler
-                once: function(type, fn) {
-                    function proxy() {
-                        self.off(type, proxy);
-                        fn.apply(self, arguments);
-                    }
-                    
-                    fn.guid = fn.guid || guid++;
-                    proxy.guid = fn.guid;
-                    return self.on(type, proxy);
-                },
-                // Fires event handlers
-                fire: function(type) {
-                    var event = events[type];
-                    if (event) {
-                        event.fire(self, slice.call(arguments, 1));
-                    }
-                    return this;
-                },
-                // Establishes a connection
-                open: function() {
-                    var type, candidates;
-                    
-                    // Cancels the scheduled connection
-                    clearTimeout(reconnectTimer);
-                    // Resets event helpers
-                    for (type in events) {
-                        events[type].unlock();
-                    }
-                    // Chooses transport
-                    transport = isSessionTransport = null;
-                    // From null or waiting state
-                    state = "preparing";
-                    
-                    candidates = slice.call(opts.transports);
-                    // Check if possible to make use of a shared socket
-                    if (opts.sharing) {
-                        candidates.unshift("session");
-                    }
-                    while (!transport && candidates.length) {
-                        type = candidates.shift();
-                        switch (type) {
-                        case "stream":
-                            candidates.unshift("sse", "streamxhr", "streamxdr", "streamiframe");
-                            break;
-                        case "longpoll":
-                            candidates.unshift("longpollajax", "longpollxdr", "longpolljsonp");
-                            break;
-                        default:
-                            // A transport instance will be null if it can't run on this environment
-                            transport = transports[type](self, opts);
-                            break;
-                        }
-                    }
-                    // Increases the number of reconnection attempts
-                    if (reconnectTry) {
-                        reconnectTry++;
-                    }
-                    // Fires the connecting event and connects
-                    if (transport) {
-                        opts.transport = type;
-                        isSessionTransport = type === "session";
-                        self.fire("connecting");
-                        transport.open();
-                    } else {
-                        self.fire("close", "notransport");
-                    }
-                    return this;
-                },
-                // Sends an event to the server via the connection
-                send: function(type, data, onResolved, onRejected) {
-                    if (state !== "opened") {
-                        throw new Error("A socket is not open yet");
-                    }
-                    
-                    // Outbound event
-                    var event = {id: guid++, type: type, data: data, reply: !!(onResolved || onRejected)};
-                    if (event.reply) {
-                        // Shared socket needs to know the callback event name
-                        // because it fires the callback event directly instead of using reply event
-                        if (isSessionTransport) {
-                            event.onResolved = onResolved;
-                            event.onRejected = onRejected;
-                        } else {
-                            callbacks[event.id] = [onResolved, onRejected];
-                        }
-                    }
-                    // Delegates to the transport
-                    transport.send(support.stringifyJSON(event));
-                    return this;
-                },
-                // Disconnects the connection
-                close: function() {
-                    // Prevents reconnection
-                    opts.reconnect = false;
-                    clearTimeout(reconnectTimer);
-                    // Fires the close event immediately
-                    // unloading variable prevents those who use this connection from being aborted
-                    self.fire("close", unloading ? "error" : "aborted");
-                    // Delegates to the transport
-                    if (transport) {
-                        transport.close();
-                    }
-                    return this;
-                },
-                // For internal use only
-                // receives an event from the server via the connection
-                receive: function(data) {
-                    var latch, 
-                        // Inbound event
-                        event = support.parseJSON(data), 
-                        args = [event.type, event.data, !event.reply ? null : {
-                            resolve: function(value) {
-                                if (!latch) {
-                                    latch = true;
-                                    self.send("reply", {id: event.id, data: value, exception: false});
-                                }
-                            },
-                            reject: function(reason) {
-                                if (!latch) {
-                                    latch = true;
-                                    self.send("reply", {id: event.id, data: reason, exception: true});
-                                }
-                            }
-                        }];
-                    
-                    return self.fire.apply(self, args).fire("_message", args);
-                }
-            },
-            i;
+                xdrURL: null
+            };
         
-        // Overrides default options
+        // Overrides defaults
         if (options) {
             for (i in options) {
-                opts[i] = options[i];
+                defaults[i] = options[i];
             }
         }
+        options = defaults;
+        
         // Strictly speaking, the following values are not option
-        // but assigns them to opts for convenience of transport
-        opts.url = url;
-        // Logic borrowed from http://stackoverflow.com/questions/105034/how-to-create-a-guid-uuid-in-javascript/2117523#2117523
-        opts.id = "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, function(c) {
+        // but assigns them to options for convenience of transport
+        options.url = url;
+        // Logic borrowed 
+        // from http://stackoverflow.com/questions/105034/how-to-create-a-guid-uuid-in-javascript/2117523#2117523
+        options.id = "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, function(c) {
             var r = Math.random() * 16 | 0, v = c === "x" ? r : (r & 0x3 | 0x8);
             return v.toString(16);
         });
-        opts.crossOrigin = !!(parts && (
+        options.crossOrigin = !!(parts && (
             // protocol 
             parts[1] != location.protocol ||
             // hostname
@@ -336,7 +170,60 @@
             // port
             (parts[3] || (parts[1] === "http:" ? 80 : 443)) != (location.port || (location.protocol === "http:" ? 80 : 443))
         ));
+
+        // Socket
+        var self = {};
         
+        // Events
+        var events = {};
+        // Adds event handler
+        self.on = function(type, fn) {
+            var event;
+            // For custom event
+            event = events[type];
+            if (!event) {
+                if (events.message.locked()) {
+                    return this;
+                }
+                event = events[type] = Callbacks();
+                event.order = events.message.order;
+            }
+            event.add(fn);
+            return this;
+        };
+        // Removes event handler
+        self.off = function(type, fn) {
+            var event = events[type];
+            if (event) {
+                event.remove(fn);
+            }
+            return this;
+        };
+        // Adds one time event handler
+        self.once = function(type, fn) {
+            function proxy() {
+                self.off(type, proxy);
+                fn.apply(self, arguments);
+            }
+            
+            fn.guid = fn.guid || guid++;
+            proxy.guid = fn.guid;
+            return self.on(type, proxy);
+        };
+        // Fires event handlers
+        self.fire = function(type) {
+            var event = events[type];
+            if (event) {
+                event.fire(self, slice.call(arguments, 1));
+            }
+            return this;
+        };
+        
+        // State
+        var state;
+        self.state = function() {
+            return state;
+        };
         // Each event represents a possible state of this socket
         // they are considered as special event and works in a different way
         for (i in {connecting: 1, open: 1, close: 1, waiting: 1}) {
@@ -350,24 +237,22 @@
         events.message = Callbacks(false);
         // It shares the same order with the open event because it can be fired when a socket is in the opened state
         events.message.order = events.open.order;
-        
-        // Prepares the state transition
+        // State transition
         self.on("connecting", function() {
             // From preparing state
             state = "connecting";
             
             var timeoutTimer;
-            
             function clearTimeoutTimer() {
                 clearTimeout(timeoutTimer);
             }
             
             // Sets a timeout timer and clear it on open or close event
-            if (opts.timeout > 0) {
+            if (options.timeout > 0) {
                 timeoutTimer = setTimeout(function() {
                     self.fire("close", "timeout");
                     transport.close();
-                }, opts.timeout);
+                }, options.timeout);
                 self.once("open", clearTimeoutTimer).once("close", clearTimeoutTimer);
             }
             
@@ -379,14 +264,12 @@
                         // Powered by the storage event and the localStorage
                         // http://www.w3.org/TR/webstorage/#event-storage
                         storage: function() {
+                            var storage = window.localStorage;
                             // The storage event of Internet Explorer works strangely
                             // TODO test Internet Explorer 11
                             if (support.browser.msie) {
                                 return;
                             }
-                            
-                            var storage = window.localStorage;
-                            
                             return {
                                 init: function() {
                                     function onstorage(event) {
@@ -395,7 +278,6 @@
                                             listener(event.newValue);
                                         }
                                     }
-                                    
                                     // Handles the storage event
                                     support.on(window, "storage", onstorage);
                                     self.once("close", function() {
@@ -431,7 +313,6 @@
                             var neim = name.replace(/\W/g, ""),
                                 container = document.getElementById(neim),
                                 win;
-                            
                             if (!container) {
                                 container = document.createElement("div");
                                 container.id = neim;
@@ -439,9 +320,7 @@
                                 container.innerHTML = '<iframe name="' + neim + '" />';
                                 document.body.appendChild(container);
                             }
-                            
                             win = container.firstChild.contentWindow;
-                            
                             return {
                                 init: function() {
                                     // Callbacks from different windows
@@ -449,7 +328,6 @@
                                     // In Internet Explorer 8 and less, only string argument can be safely passed to the function in other window
                                     win.fire = function(string) {
                                         var i;
-                                        
                                         for (i = 0; i < win.callbacks.length; i++) {
                                             win.callbacks[i](string);
                                         }
@@ -475,7 +353,6 @@
                 // Receives send and close command from the children
                 function listener(string) {
                     var command = support.parseJSON(string), data = command.data;
-                    
                     if (!command.target) {
                         if (command.type === "fire") {
                             self.fire(data.type, data.data);
@@ -505,16 +382,13 @@
                 // Chooses a server
                 server = servers.storage() || servers.windowref();
                 server.init();
-                
                 // List of children sockets
                 server.set("children", []);
                 // Flag indicating the parent socket is opened
                 server.set("opened", false);
-                
                 // Leaves traces
                 leaveTrace();
                 traceTimer = setInterval(leaveTrace, 1000);
-                
                 self.on("_message", propagateMessageEvent)
                 .once("open", function() {
                     server.set("opened", true);
@@ -526,13 +400,13 @@
                     // Removes the trace
                     document.cookie = encodeURIComponent(name) + "=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/";
                     // The heir is the parent unless unloading
-                    server.broadcast({target: "c", type: "close", data: {reason: reason, heir: !unloading ? opts.id : (server.get("children") || [])[0]}});
+                    server.broadcast({target: "c", type: "close", data: {reason: reason, heir: !unloading ? options.id : (server.get("children") || [])[0]}});
                     self.off("_message", propagateMessageEvent);
                 });
             }
-
+            
             // Makes connection sharable  
-            if (opts.sharing && !isSessionTransport) {
+            if (options.sharing && !isSessionTransport) {
                 share();
             }
         })
@@ -541,55 +415,33 @@
             state = "opened";
             
             var heartbeatTimer;
-            
             function setHeartbeatTimer() {
-                // heartbeat event will be sent after opts.heartbeat - opts._heartbeat ms
+                // heartbeat event will be sent after options.heartbeat - options._heartbeat ms
                 heartbeatTimer = setTimeout(function() {
                     self.send("heartbeat").once("heartbeat", function() {
-                        clearHeartbeatTimer();
+                        clearTimeout(heartbeatTimer);
                         setHeartbeatTimer();
                     });
-                    // transport will be closed after opts._heartbeat ms
+                    // transport will be closed after options._heartbeat ms
                     // unless the server responds it
                     heartbeatTimer = setTimeout(function() {
                         self.fire("close", "error");
                         transport.close();
-                    }, opts._heartbeat);
-                }, opts.heartbeat - opts._heartbeat);
-            }
-            
-            function clearHeartbeatTimer() {
-                clearTimeout(heartbeatTimer);
+                    }, options._heartbeat);
+                }, options.heartbeat - options._heartbeat);
             }
             
             // Sets a heartbeat timer and clears it on close event
-            if (opts.heartbeat > opts._heartbeat) {
+            if (options.heartbeat > options._heartbeat) {
                 setHeartbeatTimer();
-                self.once("close", clearHeartbeatTimer);
+                self.once("close", function() {
+                    clearTimeout(heartbeatTimer);
+                });
             }
             // Locks the connecting event
             events.connecting.lock();
             // Initializes variables related with reconnection
             reconnectTimer = reconnectDelay = reconnectTry = null;
-        })
-        .on("reply", function(reply) {
-            var fn,
-                id = reply.id,
-                data = reply.data,
-                callback = callbacks[id];
-            
-            if (callback) {
-                // callback is [onResolved, onRejected] and +false and + true is 0 and 1, respectively
-                fn = callback[+reply.exception];
-                if (fn) {
-                    if (support.isFunction(fn)) {
-                        fn.call(self, data);
-                    } else {
-                        self.fire(fn, data).fire("_message", [fn, data]);
-                    }
-                }
-                delete callbacks[id];
-            }
         })
         .on("close", function() {
             // From preparing, connecting or opened state
@@ -607,12 +459,12 @@
                 }
             }
             // Schedules reconnection
-            if (opts.reconnect) {
+            if (options.reconnect) {
                 // By adding a handler by one method in event handling
                 // it will be the last one of close event handlers having been added 
                 self.once("close", function() {
                     reconnectTry = reconnectTry || 1;
-                    reconnectDelay = opts.reconnect.call(self, reconnectDelay, reconnectTry);
+                    reconnectDelay = options.reconnect.call(self, reconnectDelay, reconnectTry);
                     if (reconnectDelay !== false) {
                         reconnectTimer = setTimeout(function() {
                             self.open();
@@ -625,6 +477,149 @@
         .on("waiting", function() {
             // From closed state
             state = "waiting";
+        });
+        
+        // Networking
+        var // Transport
+            transport,
+            isSessionTransport,
+            // Reconnection
+            reconnectTimer,
+            reconnectDelay,
+            reconnectTry;        
+        // Establishes a connection
+        self.open = function() {
+            var type, candidates;
+            
+            // Cancels the scheduled connection
+            clearTimeout(reconnectTimer);
+            // Resets event helpers
+            for (type in events) {
+                events[type].unlock();
+            }
+            // Chooses transport
+            transport = isSessionTransport = null;
+            // From null or waiting state
+            state = "preparing";
+            
+            candidates = slice.call(options.transports);
+            // Check if possible to make use of a shared socket
+            if (options.sharing) {
+                candidates.unshift("session");
+            }
+            while (!transport && candidates.length) {
+                type = candidates.shift();
+                switch (type) {
+                case "stream":
+                    candidates.unshift("sse", "streamxhr", "streamxdr", "streamiframe");
+                    break;
+                case "longpoll":
+                    candidates.unshift("longpollajax", "longpollxdr", "longpolljsonp");
+                    break;
+                default:
+                    // A transport instance will be null if it can't run on this environment
+                    transport = transports[type](self, options);
+                    break;
+                }
+            }
+            // Increases the number of reconnection attempts
+            if (reconnectTry) {
+                reconnectTry++;
+            }
+            // Fires the connecting event and connects
+            if (transport) {
+                options.transport = type;
+                isSessionTransport = type === "session";
+                self.fire("connecting");
+                transport.open();
+            } else {
+                self.fire("close", "notransport");
+            }
+            return this;
+        };
+        // Disconnects the connection
+        self.close = function() {
+            // Prevents reconnection
+            options.reconnect = false;
+            clearTimeout(reconnectTimer);
+            // Fires the close event immediately
+            // unloading variable prevents those who use this connection from being aborted
+            self.fire("close", unloading ? "error" : "aborted");
+            // Delegates to the transport
+            if (transport) {
+                transport.close();
+            }
+            return this;
+        };
+        
+        // Messaging
+        // A map for reply callback
+        var callbacks = {};
+        // Sends an event to the server via the connection
+        self.send = function(type, data, onResolved, onRejected) {
+            if (state !== "opened") {
+                throw new Error("A socket is not open yet");
+            }
+            
+            // Outbound event
+            var event = {id: guid++, type: type, data: data, reply: !!(onResolved || onRejected)};
+            if (event.reply) {
+                // Shared socket needs to know the callback event name
+                // because it fires the callback event directly instead of using reply event
+                if (isSessionTransport) {
+                    event.onResolved = onResolved;
+                    event.onRejected = onRejected;
+                } else {
+                    callbacks[event.id] = [onResolved, onRejected];
+                }
+            }
+            // Delegates to the transport
+            transport.send(support.stringifyJSON(event));
+            return this;
+        };
+        // For internal use only
+        // receives an event from the server via the connection
+        self.receive = function(data) {
+            var latch, 
+                // Inbound event
+                event = support.parseJSON(data), 
+                args = [event.type, event.data, !event.reply ? null : {
+                    resolve: function(value) {
+                        if (!latch) {
+                            latch = true;
+                            self.send("reply", {id: event.id, data: value, exception: false});
+                        }
+                    },
+                    reject: function(reason) {
+                        if (!latch) {
+                            latch = true;
+                            self.send("reply", {id: event.id, data: reason, exception: true});
+                        }
+                    }
+                }];
+            
+            return self.fire.apply(self, args)
+            // _message event for shared sockets
+            .fire("_message", args);
+        };
+        self.on("reply", function(reply) {
+            var fn,
+                id = reply.id,
+                data = reply.data,
+                callback = callbacks[id];
+            
+            if (callback) {
+                // callback is [onResolved, onRejected] and +false and + true is 0 and 1, respectively
+                fn = callback[+reply.exception];
+                if (fn) {
+                    if (support.isFunction(fn)) {
+                        fn.call(self, data);
+                    } else {
+                        self.fire(fn, data).fire("_message", [fn, data]);
+                    }
+                }
+                delete callbacks[id];
+            }
         });
         
         return self.open();
