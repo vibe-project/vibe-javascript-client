@@ -499,14 +499,11 @@
                 
                 // Receives send and close command from the children
                 function listener(string) {
-                    var command = util.parseJSON(string), data = command.data;
-                    if (!command.target) {
-                        if (command.type === "fire") {
-                            self.fire(data.type, data.data);
-                        }
-                    } else if (command.target === "p") {
+                    var data, command = util.parseJSON(string);
+                    if (command.target === "p") {
                         switch (command.type) {
                         case "send":
+                            data = util.parseJSON(command.data);
                             self.send(data.type, data.data, data.onResolved, data.onRejected);
                             break;
                         case "close":
@@ -879,11 +876,7 @@
             function listener(string) {
                 var command = util.parseJSON(string), data = command.data;
                 
-                if (!command.target) {
-                    if (command.type === "fire") {
-                        socket.fire(data.type, data.data);
-                    }
-                } else if (command.target === "c") {
+                if (command.target === "c") {
                     switch (command.type) {
                     case "open":
                         socket.fire("open");
