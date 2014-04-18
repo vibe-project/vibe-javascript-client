@@ -1,6 +1,6 @@
 {
   "name": "react",
-  "version": "3.0.0-alpha1",
+  "version": "3.0.0-Alpha1",
   "main": "react.js",
   "ignore": [
     "node_modules",

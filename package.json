@@ -1,7 +1,7 @@
 {
   "name": "react-client",
   "version": "3.0.0-Alpha1",
-  "homepage": "http://atmosphere.github.io/react/javascript-client",
+  "homepage": "http://atmosphere.github.io/react/",
   "description": "React client for JavaScript",
   "main": "react.js",
   "scripts": {

@@ -1,6 +1,6 @@
 /*
  * React v3.0.0-Alpha1
- * http://atmosphere.github.io/react/javascript-client/
+ * http://atmosphere.github.io/react//
  * 
  * Copyright 2011-2014, Donghwan Kim 
  * Licensed under the Apache License, Version 2.0
