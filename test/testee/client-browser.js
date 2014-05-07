@@ -61,15 +61,17 @@ http.createServer(function(req, res) {
 .on("request", function(req, res) {
     var urlObj = url.parse(req.url);
     if (urlObj.pathname === "/react") {
-        // Not sure what agent option does but it's needed
-        proxy.web(req, res, {target: targetAddr, agent: http.globalAgent});
+        // Not sure what agent option does and why empty callback is needed but
+        // they are needed
+        proxy.web(req, res, {target: targetAddr, agent: http.globalAgent}, function() {});
     }
 })
 .on("upgrade", function (req, socket, head) {
     var urlObj = url.parse(req.url);
     if (urlObj.pathname === "/react") {
-        // Here agent option doesn't seem to be needed but just to be sure
-        proxy.ws(req, socket, head, {target: targetAddr, agent: http.globalAgent});
+        // Here agent option and empty callback don't seem to be needed but just
+        // to be sure
+        proxy.ws(req, socket, head, {target: targetAddr, agent: http.globalAgent}, function() {});
     }
 })
 .listen(9000);
