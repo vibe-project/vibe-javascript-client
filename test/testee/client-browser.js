@@ -16,6 +16,12 @@ var response,
 //    1. test.html?sameorigin for same-origin connections that will be proxied to the real server
 //    2. test.html?crossorigin for cross-origin connections that will connect to the real server
 // 3. Do test by mocha and watch the result
+//
+// Note
+// * If the browser is IE 6 or 7, add your server's address to hosts file under
+// the name of 'test.react.io'. It is needed to work around the limit on the
+// number of simultaneous connections. This being so, don't connect to
+// 'test.react.io:9000/test.html'
 http.createServer(function(req, res) {
     var urlObj = url.parse(req.url, true);
     switch (urlObj.pathname) {
@@ -27,11 +33,10 @@ http.createServer(function(req, res) {
         response = res;
         break;
     // Tell the browser to connect to the server
-    // It's called by the react server
+    // It's called by the react server from test runner
     case "/open":
         targetAddr = urlObj.query.uri.replace("/react", "");
-        urlObj.query.uri = "http://localhost:9000/react";
-        response.end(JSON.stringify(urlObj.query));
+        response.end("connect(" + JSON.stringify(JSON.stringify(urlObj.query)) + ")");
         res.end();
         break;
     // Static assets

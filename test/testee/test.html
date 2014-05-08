@@ -10,107 +10,130 @@
         <script type="text/javascript" src="react.js"></script>
         <script type="text/javascript">
         var socket,
-        	crossOrigin = location.search === "?crossorigin";
+            crossOrigin = location.search === "?crossorigin";
         
-        // A vanilla form of long polling
+        function connect(text) {
+            // As a new test begins, close a previous connection
+            if (socket) {
+                socket.close();
+            }
+
+            // Prepare params
+            var params = react.util.parseJSON(text);
+            if (!crossOrigin) {
+                params.uri = "/react";
+            }
+            // If the given transport is not supported, 
+            // find a fallback transport in a group where it belongs first and 
+            // if not exists find it in other groups in order of ws, stream, longpoll
+            params.transport = (function find(transport) {
+                function able(transport) {
+                    var can;
+                    switch (transport) {
+                    case "ws":
+                        can = !!window.WebSocket;
+                        break;
+                    case "sse":
+                        can = !!window.EventSource;
+                        break;
+                    case "streamxdr":
+                        can = !!window.XDomainRequest;
+                        break;
+                    case "streamxhr":
+                        can = (!react.util.browser.msie || (+react.util.browser.version.split(".")[0] >= 10)) && 
+                                (!crossOrigin || react.util.corsable)
+                        break;
+                    case "streamiframe":
+                        if (window.ActiveXObject && !crossOrigin) {
+                            try {
+                                can = !!new ActiveXObject("htmlfile");
+                            } catch (e) {}
+                        }
+                        break;
+                    case "longpollajax":
+                        can = !crossOrigin || react.util.corsable;
+                        break;
+                    case "longpollxdr":
+                        can = !!window.XDomainRequest;
+                        break;
+                    case "longpolljsonp":
+                        can = true;
+                        break;
+                    }
+                    return can ? transport : false;
+                }
+                
+                switch (transport) {
+                case "ws":
+                    return able("ws") || find("stream");
+                case "stream":
+                    return able("sse") || able("streamxhr") || able("streamxdr") || able("streamiframe") || find("longpoll");
+                case "sse": case "streamxhr": case "streamxdr": case "streamiframe":
+                    return able(transport) || find("stream");
+                case "longpoll":
+                    return able("longpollajax") || able("longpollxdr") || able("longpolljsonp");
+                case "longpollajax": case "longpollxdr": case "longpolljsonp":
+                    return able(transport) || find("longpoll");
+                }
+            })(params.transport);
+            
+            // Connect to the react server
+            socket = react.open(params.uri, {
+                transports: [params.transport], 
+                heartbeat: +params.heartbeat || false, 
+                _heartbeat: +params._heartbeat || false, 
+                reconnect: false, 
+                xdrURL: function(url) {
+                    return url;
+                }
+            })
+            .on("abort", function() {
+                this.close();
+            })
+            .on("echo", function(data) {
+                this.send("echo", data);
+            })
+            .on("reaction", function(bool, reply) {
+                if (bool) {
+                    reply.resolve(bool);
+                } else {
+                    reply.reject(bool);
+                }
+            });
+        }
+        
+        // A vanilla form of longpolljsonp
         (function poll() {
-            var xhr = react.util.xhr();
-            xhr.onreadystatechange = function() {
-                if (xhr.readyState === 4 && xhr.status === 200) {
-                    // As a new test begins, close a previous connection
-                    if (socket) {
-                        socket.close();
+            var hostname = "",
+            	script = document.createElement("script"),
+                head = document.head || document.getElementsByTagName("head")[0] || document.documentElement;
+            
+            // If the browser is IE 6 or 7, it can not maintain more than 2 connections per host.
+            // Because at least 2 connections are needed to test react, so this connection 
+            // for executing test should open under other host. test.react.io actually 
+            // should indicate localhost in your hosts file.
+            if (react.util.browser.msie && +react.util.browser.version.split(".")[0] < 8) {
+                hostname = "http://test.react.io:9000";
+            }
+            
+            script.async = true;
+            script.src = hostname + "/listen?_=" + Math.random();
+            script.clean = function() {
+                script.clean = script.onerror = script.onload = script.onreadystatechange = null;
+                if (script.parentNode) {
+                    script.parentNode.removeChild(script);
+                }
+            };
+            script.onload = script.onreadystatechange = function() {
+                if (!script.readyState || /loaded|complete/.test(script.readyState)) {
+                    if (script.clean) {
+                        script.clean();
                     }
-                    
-                    var params = react.util.parseJSON(xhr.responseText);
-                    
-                    if (!crossOrigin) {
-                        params.uri = "/react";
-                    }
-                    // If the given transport is not supported, 
-                    // find a fallback transport in a group where it belongs first and 
-                    // if not exists find it in other groups in order of ws, stream, longpoll
-                    params.transport = (function find(transport) {
-                        function able(transport) {
-                            var can;
-                            switch (transport) {
-                            case "ws":
-                                can = !!window.WebSocket;
-                                break;
-                            case "sse":
-                                can = !!window.EventSource;
-                                break;
-                            case "streamxdr":
-                                can = !!window.XDomainRequest;
-                                break;
-                            case "streamxhr":
-                                can = (!react.util.browser.msie || (+react.util.browser.version.split(".")[0] >= 10)) && 
-                                        (!crossOrigin || react.util.corsable)
-                                break;
-                            case "streamiframe":
-                                if (window.ActiveXObject && !crossOrigin) {
-                                    try {
-                                        can = !!new ActiveXObject("htmlfile");
-                                    } catch (e) {}
-                                }
-                                break;
-                            case "longpollajax":
-                                can = !crossOrigin || react.util.corsable;
-                                break;
-                            case "longpollxdr":
-                                can = !!window.XDomainRequest;
-                                break;
-                            case "longpolljsonp":
-                                can = true;
-                                break;
-                            }
-                            return can ? transport : false;
-                        }
-                        
-                        switch (transport) {
-                        case "ws":
-                            return able("ws") || find("stream");
-                        case "stream":
-                            return able("sse") || able("streamxhr") || able("streamxdr") || able("streamiframe") || find("longpoll");
-                        case "sse": case "streamxhr": case "streamxdr": case "streamiframe":
-                            return able(transport) || find("stream");
-                        case "longpoll":
-                            return able("longpollajax") || able("longpollxdr") || able("longpolljsonp");
-                        case "longpollajax": case "longpollxdr": case "longpolljsonp":
-                            return able(transport) || find("longpoll");
-                        }
-                    })(params.transport);
-                    
-                    socket = react.open(params.uri, {
-                        transports: [params.transport], 
-                        heartbeat: +params.heartbeat || false, 
-                        _heartbeat: +params._heartbeat || false, 
-                        reconnect: false, 
-                        xdrURL: function(url) {
-                            return url;
-                        }
-                    })
-                    .on("abort", function() {
-                        this.close();
-                    })
-                    .on("echo", function(data) {
-                        this.send("echo", data);
-                    })
-                    .on("reaction", function(bool, reply) {
-                        if (bool) {
-                            reply.resolve(bool);
-                        } else {
-                            reply.reject(bool);
-                        }
-                    });
-                    // Continue a long polling
                     poll();
                 }
             };
-            // No cache
-            xhr.open("GET", "/listen?" + Math.random());
-            xhr.send();
-        }());
+            head.insertBefore(script, head.firstChild);
+        })();
         </script>
     </body>
 </html>
