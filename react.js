@@ -1441,8 +1441,7 @@
                 script.src = url;
                 script.clean = function() {
                     // Assigns null to attributes to avoid memory leak in IE
-                    // doing it to src stops connection in IE 6 and 7
-                    script.clean = script.src = script.onerror = script.onload = script.onreadystatechange = null;
+                    script.clean = script.onerror = script.onload = script.onreadystatechange = null;
                     if (script.parentNode) {
                         script.parentNode.removeChild(script);
                     }
