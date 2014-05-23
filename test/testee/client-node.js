@@ -29,7 +29,7 @@ http.createServer(function(req, res) {
         .on("echo", function(data) {
             this.send("echo", data);
         })
-        .on("reaction", function(bool, reply) {
+        .on("replyable", function(bool, reply) {
             if (bool) {
                 reply.resolve(bool);
             } else {
