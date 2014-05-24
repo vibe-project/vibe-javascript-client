@@ -1,7 +1,7 @@
 var url = require("url");
 var fs = require("fs");
 var http = require("http");
-var react = require("./react");
+var vibe = require("./vibe");
 var Mocha = require("mocha");
 
 module.exports = function(grunt) {
@@ -13,7 +13,7 @@ module.exports = function(grunt) {
             switch (urlObj.pathname) {
             case "/open":
                 var query = urlObj.query;
-                react.open(query.uri, {
+                vibe.open(query.uri, {
                     transports: [query.transport], 
                     heartbeat: +query.heartbeat || false, 
                     _heartbeat: +query._heartbeat || false, 
@@ -44,9 +44,9 @@ module.exports = function(grunt) {
         .listen(9000, function() {
             var server = this;
             var mocha = new Mocha({grep: /ws|sse|longpollajax/});
-            mocha.addFile("./node_modules/react-protocol/test/client.js");
+            mocha.addFile("./node_modules/vibe-protocol/test/client.js");
             
-            delete require.cache[require.resolve("./node_modules/react-protocol/test/client.js")];
+            delete require.cache[require.resolve("./node_modules/vibe-protocol/test/client.js")];
             mocha.run(function(failures) {
                 server.close(function() {
                     done(failures === 0);
@@ -72,9 +72,9 @@ module.exports = function(grunt) {
                 res.end("poll(" + sid + ")");
 
                 var mocha = new Mocha({grep: new RegExp(urlObj.query.transports), reporter: "spec"});
-                mocha.addFile("./node_modules/react-protocol/test/client.js");
+                mocha.addFile("./node_modules/vibe-protocol/test/client.js");
                 
-                delete require.cache[require.resolve("./node_modules/react-protocol/test/client.js")];
+                delete require.cache[require.resolve("./node_modules/vibe-protocol/test/client.js")];
                 mocha.loadFiles();
                 
                 function runMocha() {
@@ -124,9 +124,9 @@ module.exports = function(grunt) {
                 })();
                 res.end();
                 break;
-            case "/react.js":
+            case "/vibe.js":
                 res.setHeader("content-type", "text/javascript; utf-8");
-                fs.readFile("./react.js", function(err, data) {
+                fs.readFile("./vibe.js", function(err, data) {
                     if (err) {
                         throw err;
                     }

@@ -1,15 +1,15 @@
 {
-  "name": "react-client",
+  "name": "vibe-client",
   "version": "3.0.0-Alpha1",
-  "homepage": "http://atmosphere.github.io/react/",
-  "description": "React client for JavaScript",
-  "main": "react.js",
+  "homepage": "http://atmosphere.github.io/vibe/",
+  "description": "Vibe client for JavaScript",
+  "main": "vibe.js",
   "scripts": {
     "test": "grunt test"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/atmosphere/react-javascript-client.git"
+    "url": "https://github.com/atmosphere/vibe-javascript-client.git"
   },
   "keywords": [
     "realtime",
@@ -25,7 +25,7 @@
   },
   "license": "Apache License, Version 2.0",
   "bugs": {
-    "url": "https://github.com/atmosphere/react-javascript-client/issues"
+    "url": "https://github.com/atmosphere/vibe-javascript-client/issues"
   },
   "dependencies": {
     "jsdom": "0.10.5",
@@ -33,7 +33,7 @@
     "eventsource": "0.1.1"
   },
   "devDependencies": {
-    "react-protocol": "Atmosphere/react-protocol",
+    "vibe-protocol": "Atmosphere/vibe-protocol",
     "grunt": "0.4.5",
     "http-proxy": "1.1.4",
     "mocha": "1.19.0",

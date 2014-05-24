@@ -1,6 +1,6 @@
 /*
- * React v3.0.0-Alpha1
- * http://atmosphere.github.io/react/
+ * Vibe v3.0.0-Alpha1
+ * http://atmosphere.github.io/vibe/
  * 
  * Copyright 2011-2014, Donghwan Kim 
  * Licensed under the Apache License, Version 2.0
@@ -26,7 +26,7 @@
         module.exports.util.corsable = true;
     } else {
         // Browser globals, Window
-        root.react = factory(root);
+        root.vibe = factory(root);
     }
 }(this, function(window) {
     
@@ -1468,21 +1468,21 @@
         }
     };
     
-    var // Defines the react
-        react = {},
+    var // Defines the vibe
+        vibe = {},
         // Socket instances
         sockets = [];
 
     // Creates a new socket and connects to the given url
-    react.open = function(url, options) {
+    vibe.open = function(url, options) {
         // Opens a new socket
         var socket = Socket(url, options);
         sockets.push(socket);
         return socket; 
     };
     // Exposes to help debug or apply hotfix but not public
-    react.util = util;
-    react.transports = transports;
+    vibe.util = util;
+    vibe.transports = transports;
     
     // For browser environment
     util.on(window, "unload", function() {
@@ -1517,5 +1517,5 @@
         }
     });
     
-    return react;
+    return vibe;
 }));

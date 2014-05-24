@@ -1,7 +1,7 @@
 {
-  "name": "react",
+  "name": "vibe",
   "version": "3.0.0-Alpha1",
-  "main": "react.js",
+  "main": "vibe.js",
   "ignore": [
     "node_modules",
     "test",

@@ -4,13 +4,13 @@
         <meta charset="utf-8" />
         <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>React Test Suite</title>
+        <title>Vibe Test Suite</title>
     </head>
     <body>
-        <script type="text/javascript" src="react.js"></script>
+        <script type="text/javascript" src="vibe.js"></script>
         <script type="text/javascript">        
         function setMochaResults(text) {
-            window.mochaResults = react.util.parseJSON(text);
+            window.mochaResults = vibe.util.parseJSON(text);
         }
         
         function poll(sid) {
@@ -44,8 +44,8 @@
                 socket.close();
             }
             
-            var params = react.util.parseJSON(text);
-            socket = react.open(params.uri.replace("localhost", "127.0.0.1"), {
+            var params = vibe.util.parseJSON(text);
+            socket = vibe.open(params.uri.replace("localhost", "127.0.0.1"), {
                 transports: [params.transport], 
                 heartbeat: +params.heartbeat || false, 
                 _heartbeat: +params._heartbeat || false, 
@@ -82,8 +82,8 @@
             if (window.XDomainRequest) {
                 transports.push("streamxdr");
             }
-            if ((!react.util.browser.msie || (+react.util.browser.version.split(".")[0] >= 10)) && 
-                    (!crossOrigin || react.util.corsable)) {
+            if ((!vibe.util.browser.msie || (+vibe.util.browser.version.split(".")[0] >= 10)) && 
+                    (!crossOrigin || vibe.util.corsable)) {
                 transports.push("streamxhr");
             }
             if (window.ActiveXObject && !crossOrigin) {
@@ -92,7 +92,7 @@
                     transports.push("streamiframe");
                 } catch (e) {}
             }
-            if (!crossOrigin || react.util.corsable) {
+            if (!crossOrigin || vibe.util.corsable) {
                 transports.push("longpollajax");
             }
             if (window.XDomainRequest) {
