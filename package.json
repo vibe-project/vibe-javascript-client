@@ -33,10 +33,12 @@
     "eventsource": "0.1.1"
   },
   "devDependencies": {
-    "vibe-protocol": "Atmosphere/vibe-protocol",
+    "vibe-protocol": "Atmosphere/vibe-protocol#5046d10948",
     "grunt": "0.4.5",
     "http-proxy": "1.1.4",
     "mocha": "1.19.0",
-    "chai": "1.9.1"
+    "chai": "1.9.1",
+    "grunt-saucelabs": "8.0.1",
+    "ip": "0.3.0"
   }
 }

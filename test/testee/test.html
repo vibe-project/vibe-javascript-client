@@ -8,44 +8,44 @@
     </head>
     <body>
         <script type="text/javascript" src="vibe.js"></script>
-        <script type="text/javascript">        
-        function setMochaResults(text) {
-            window.mochaResults = vibe.util.parseJSON(text);
-        }
+        <script type="text/javascript">
+        var sessionId;
+        var crossOrigin = location.search === "?crossorigin"
         
-        function poll(sid) {
-            var script = document.createElement("script"),
-                head = document.head || document.getElementsByTagName("head")[0] || document.documentElement;
-            
-            script.async = true;
-            script.src = "http://localhost:9000/poll?sid=" + sid + "&_=" + Math.random();
-            script.clean = function() {
-                script.clean = script.onerror = script.onload = script.onreadystatechange = null;
-                if (script.parentNode) {
-                    script.parentNode.removeChild(script);
-                }
-            };
-            script.onload = script.onreadystatechange = function() {
-                if (!script.readyState || /loaded|complete/.test(script.readyState)) {
-                    if (script.clean) {
-                        script.clean();
+        window.begin = function(sid) {
+            sessionId = vibe.util.parseJSON(sid);
+            (function poll() {
+                var script = document.createElement("script"),
+                    head = document.head || document.getElementsByTagName("head")[0] || document.documentElement;
+                
+                script.async = true;
+                script.src = "/poll?sid=" + sessionId + "&_=" + Math.random();
+                script.onload = script.onreadystatechange = function() {
+                    if (!script.readyState || /loaded|complete/.test(script.readyState)) {
+                        // Needed in Internet Explorer 8 and 9 when testing cross origin connection
+                        script.onload = script.onreadystatechange = null;
+                        if (script.parentNode) {
+                            script.parentNode.removeChild(script);
+                        }
+                        if (!window.mochaResults) {
+                            poll();
+                        }
                     }
-                    if (!window.mochaResults) {
-                        poll(sid);
-                    }
-                }
-            };
-            head.insertBefore(script, head.firstChild);
-        }
+                };
+                head.insertBefore(script, head.firstChild);
+            })();
+        };
+        window.end = function(text) {
+            window.mochaResults = vibe.util.parseJSON(text);
+        };
         
         var socket;
-        function connect(text) {
+        window.connect = function(text) {
             if (socket) {
                 socket.close();
             }
-            
             var params = vibe.util.parseJSON(text);
-            socket = vibe.open(params.uri.replace("localhost", "127.0.0.1"), {
+            socket = vibe.open((crossOrigin ? params.uri : "/vibe") + "?sid=" + sessionId, {
                 transports: [params.transport], 
                 heartbeat: +params.heartbeat || false, 
                 _heartbeat: +params._heartbeat || false, 
@@ -58,7 +58,11 @@
                 this.close();
             })
             .on("echo", function(data) {
-                this.send("echo", data);
+                var self = this;
+                // To mitigate stress
+                setTimeout(function() {
+                    self.send("echo", data);
+                }, 10);
             })
             .on("replyable", function(bool, reply) {
                 if (bool) {
@@ -67,23 +71,53 @@
                     reply.reject(bool);
                 }
             });
-        }
-        
-        (function() {
-            var crossOrigin = location.search === "?crossorigin"
-            var transports = [];
+        };
+        window.onload = function() {
+            var browser = (function() {
+                var ua = navigator.userAgent.toLowerCase(),
+                    browser = {},
+                    match = /(chrome)[ \/]([\w.]+)/.exec(ua) ||
+                        /(android) ([\w.]+)/.exec(ua) ||
+                        /(opera)(?:.*version|)[ \/]([\w.]+)/.exec(ua) ||
+                        /(iphone|ipad);.+os ([\w.]+) /.exec(ua) ||
+                        /version\/([\w.]+).+(safari)/.exec(ua) ||
+                        /(msie) ([\w.]+)/.exec(ua) ||
+                        /(trident)(?:.*? rv:([\w.]+)|)/.exec(ua) || 
+                        ua.indexOf("compatible") < 0 && /(mozilla)(?:.*? rv:([\w.]+)|)/.exec(ua) || [];
+
+                if (match[2] === "safari") {
+                    match[0] = match[2];
+                    match[2] = match[1];
+                    match[1] = match[0];
+                }
+
+                browser[match[1] || ""] = true;
+                browser.version = match[2] || "0";
+
+                if (browser.trident) {
+                    browser.msie = true;
+                }
+                
+                // Cover both chrome/35.0 and iphone 7_1
+                browser.vmajor = +browser.version.split(/\.|_/)[0];
+                return browser;
+            })();
             
+            var transports = [];
             if (window.WebSocket) {
                 transports.push("ws");
             }
-            if (window.EventSource) {
+            if (window.EventSource && 
+                // TODO think if this is possible by feature detection
+                (!(browser.safari || browser.iphone || browser.ipad) || !crossOrigin || browser.vmajor >= 7)) {
                 transports.push("sse");
             }
             if (window.XDomainRequest) {
                 transports.push("streamxdr");
             }
-            if ((!vibe.util.browser.msie || (+vibe.util.browser.version.split(".")[0] >= 10)) && 
-                    (!crossOrigin || vibe.util.corsable)) {
+            if ((!crossOrigin || vibe.util.corsable) && 
+                (!browser.msie || browser.vmajor >= 10) && 
+                (!browser.opera || browser.vmajor >= 13)) {
                 transports.push("streamxhr");
             }
             if (window.ActiveXObject && !crossOrigin) {
@@ -104,22 +138,18 @@
                 head = document.head || document.getElementsByTagName("head")[0] || document.documentElement;
             
             script.async = true;
-            script.src = "/start?transports=" + encodeURIComponent(transports.join("|"));
-            script.clean = function() {
-                script.clean = script.onerror = script.onload = script.onreadystatechange = null;
-                if (script.parentNode) {
-                    script.parentNode.removeChild(script);
-                }
-            };
+            script.src = "/begin?transports=" + encodeURIComponent(transports.join("|"));
             script.onload = script.onreadystatechange = function() {
                 if (!script.readyState || /loaded|complete/.test(script.readyState)) {
-                    if (script.clean) {
-                        script.clean();
+                    // Needed in Internet Explorer 8 and 9 when testing cross origin connection
+                    script.onload = script.onreadystatechange = null;
+                    if (script.parentNode) {
+                        script.parentNode.removeChild(script);
                     }
                 }
             };
             head.insertBefore(script, head.firstChild);
-        })();
+        };
         </script>
     </body>
 </html>
