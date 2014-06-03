@@ -277,5 +277,5 @@ module.exports = function(grunt) {
             }
         });
     });
-    grunt.registerTask("test", ["test-node", "test-browser"]);
+    grunt.registerTask("test", ["test-node"]);
 };
