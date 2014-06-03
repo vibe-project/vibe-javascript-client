@@ -25,7 +25,7 @@ module.exports = function(grunt) {
                 {browserName: "firefox", version: "28"},
                 {browserName: "safari", version: "7"},
                 {browserName: "safari", version: "6"},
-                {browserName: "iphone", version: "7.1"},
+                {browserName: "iphone", version: "7.0"},
 
                 // They fail often in sauce VMs maybe not in your VMs
                 // Failure in cross origin: 
@@ -38,7 +38,7 @@ module.exports = function(grunt) {
                 // They fail certainly
                 // Failure in same and cross origin: 
                 // * should not lose any event in an exchange of one hundred of event
-                {browserName: "iphone", version: "6.1"},
+                {browserName: "iphone", version: "6.0"},
                 
                 // * Internet Explorer 6 and 7 can't be tested because we don't use
                 // sauce tunnel to run test correctly and can't use localhost and 127.0.0.1 
