@@ -188,10 +188,13 @@
                 // IE 6-10
                 /(msie) ([\w.]+)/.exec(ua) ||
                 // IE 11+
-                /(trident)(?:.*? rv:([\w.]+)|)/.exec(ua) || [];
+                /(trident)(?:.*? rv:([\w.]+)|)/.exec(ua) ||
+                // Safari
+                ua.indexOf("android") < 0 && /version\/(.+) (safari)/.exec(ua) || [];
         
         browser[match[1] || ""] = true;
         browser.version = match[2] || "0";
+        browser.vmajor = browser.version.split(".")[0];
         // Trident is the layout engine of the Internet Explorer
         if (browser.trident) {
             browser.msie = true;
@@ -1093,7 +1096,7 @@
                 EventSource = window.EventSource,
                 self = transports.httpbase(socket, options);
             
-            if (!EventSource) {
+            if (!EventSource || (crossOrigin && util.browser.safari && util.browser.vmajor < 7)) {
                 return;
             }
             
@@ -1147,7 +1150,7 @@
             var xhr,
                 self = transports.streambase(socket, options);
             
-            if ((util.browser.msie && +util.browser.version.split(".")[0] < 10) || (options.crossOrigin && !util.corsable)) {
+            if ((util.browser.msie && util.browser.vmajor < 10) || (options.crossOrigin && !util.corsable)) {
                 return;
             }
             
