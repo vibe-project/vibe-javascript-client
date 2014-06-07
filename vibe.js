@@ -1096,7 +1096,7 @@
                 EventSource = window.EventSource,
                 self = transports.httpbase(socket, options);
             
-            if (!EventSource || (crossOrigin && util.browser.safari && util.browser.vmajor < 7)) {
+            if (!EventSource || (options.crossOrigin && util.browser.safari && util.browser.vmajor < 7)) {
                 return;
             }
             
