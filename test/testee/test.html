@@ -105,7 +105,9 @@
             })();
             
             var transports = [];
-            if (window.WebSocket) {
+            if (window.WebSocket &&
+                // Proxy lib doesn't seem to support Safari 5's WebSocket protocol, hixie-76
+                (!browser.safari || browser.vmajor >= 6 || crossOrigin)) {
                 transports.push("ws");
             }
             if (window.EventSource && 

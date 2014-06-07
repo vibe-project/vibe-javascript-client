@@ -25,6 +25,7 @@ module.exports = function(grunt) {
                 {browserName: "firefox", version: "28"},
                 {browserName: "safari", version: "7"},
                 {browserName: "safari", version: "6"},
+                {browserName: "safari", version: "5"},
                 {browserName: "iphone", version: "7.0"},
 
                 // They fail often in sauce VMs maybe not in your VMs
@@ -43,11 +44,9 @@ module.exports = function(grunt) {
                 // * Internet Explorer 6 and 7 can't be tested because we don't use
                 // sauce tunnel to run test correctly and can't use localhost and 127.0.0.1 
                 // so that it's not possible to avoid the persistent connection limit per host
-                // * Safari 5.1 is not supported in sauce
                 // * Opera 12 kills the server testing WebSocket https://github.com/einaros/ws/issues/246
-                // * Opera 13+ are not supported due to market share
+                // * Opera 13+ are not supported due to market share Sauce says
                 // * Android 4 emulators of sauce don't work properly
-                // * Android 2 and 3 are not supported due to market share
             ].forEach(function(browser) {
                 // Group tests by browser to avoid the sauce issue skipping some tests
                 if (!(browser.browserName in config)) {
