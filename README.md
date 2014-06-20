@@ -14,4 +14,4 @@ The Vibe JavaScript Client is a concise and lightweight client-side JavaScript l
 
 \* experimental yet.
 
-Please see the [website](http://atmosphere.github.io/vibe/) for full documentation. 
+Please see the [website](http://atmosphere.github.io/vibe/projects/vibe-javascript-client/) for full documentation. 
