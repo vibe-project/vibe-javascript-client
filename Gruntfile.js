@@ -102,12 +102,21 @@ module.exports = function(grunt) {
                 .on("echo", function(data) {
                     this.send("echo", data);
                 })
-                .on("replyable", function(bool, reply) {
-                    if (bool) {
-                        reply.resolve(bool);
-                    } else {
-                        reply.reject(bool);
-                    }
+                .on("rre.resolve", function(data, reply) {
+                    reply.resolve(data);
+                })
+                .on("rre.reject", function(data, reply) {
+                    reply.reject(data);
+                })
+                .on("sre.resolve", function(data) {
+                    this.send("sre.resolve", data, function(data) {
+                        this.send("sre.done", data);
+                    });
+                })
+                .on("sre.reject", function(data) {
+                    this.send("sre.reject", data, null, function(data) {
+                        this.send("sre.done", data);
+                    });
                 });
                 break;
             default:
