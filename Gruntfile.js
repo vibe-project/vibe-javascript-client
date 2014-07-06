@@ -56,8 +56,8 @@ module.exports = function(grunt) {
                             tunneled: false,
                             // Use a real ip address because Sauce connect doesn't work correctly 
                             urls: [
-                                "http://" + ipAddr + ":9000/test.html?sameorigin", 
-                                "http://" + ipAddr + ":9000/test.html?crossorigin"
+                                "http://" + ipAddr + ":9000/testee.html?sameorigin", 
+                                "http://" + ipAddr + ":9000/testee.html?crossorigin"
                             ],
                             build: process.env.TRAVIS_BUILD_NUMBER,
                             browsers: [],
@@ -182,7 +182,7 @@ module.exports = function(grunt) {
         http.createServer(function(req, res) {
             var urlObj = url.parse(req.url, true);
             switch (urlObj.pathname) {
-            // Executed by test.html to start test
+            // Executed by testee.html to start test
             case "/begin":
                 var session = sessions.issue();
                 res.setHeader("content-type", "text/javascript; utf-8");
@@ -222,7 +222,7 @@ module.exports = function(grunt) {
                     });
                 });
                 break;
-            // Executed by test.html to make a persistent connection waiting a message from /open
+            // Executed by testee.html to make a persistent connection waiting a message from /open
             case "/poll":
                 res.setHeader("cache-control", "no-cache, no-store, must-revalidate");
                 res.setHeader("pragma", "no-cache");
@@ -250,9 +250,9 @@ module.exports = function(grunt) {
                     res.end(data);
                 });
                 break;
-            case "/test.html":
+            case "/testee.html":
                 res.setHeader("content-type", "text/html; utf-8");
-                fs.readFile("./test/testee/test.html", function(err, data) {
+                fs.readFile("./test/resources/testee.html", function(err, data) {
                     if (err) {
                         throw err;
                     }
