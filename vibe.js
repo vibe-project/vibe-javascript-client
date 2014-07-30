@@ -287,7 +287,7 @@
             defaults = {
                 transports: ["ws", "stream", "longpoll"],
                 timeout: false,
-                heartbeat: false,
+                heartbeat: 20000,
                 _heartbeat: 5000,
                 sharing: false,
                 reconnect: function(lastDelay) {
