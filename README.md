@@ -1,5 +1,4 @@
 ## Vibe JavaScript Client
-[![Build Status](http://img.shields.io/travis/Atmosphere/vibe-javascript-client/master.svg?style=flat)](https://travis-ci.org/Atmosphere/vibe-javascript-client)
 
 <p>Vibe JavaScript Client is a lightweight <sup><strong>A</strong></sup> JavaScript client for browser-based <sup><strong>B</strong></sup> and Node-based <sup><strong>C</strong></sup> application.</p>
 <dl>
