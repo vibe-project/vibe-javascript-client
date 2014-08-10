@@ -9,8 +9,15 @@
     <body>
         <script type="text/javascript" src="vibe.js"></script>
         <script type="text/javascript">
+        // To populate sockets
+        vibe.transports._base = vibe.transports.base;
+        vibe.transports.base = function(socket, options) {
+            socket.id = options.id;
+            return vibe.transports._base.apply(this, arguments);
+        };
+        
         var sessionId;
-        var crossOrigin = location.search === "?crossorigin"
+        var crossOrigin = location.search === "?crossorigin";
         
         window.begin = function(sid) {
             sessionId = vibe.util.parseJSON(sid);
@@ -53,6 +60,23 @@
                 xdrURL: function(url) {
                     return url;
                 }
+            })
+            .on("close", function() {
+                var script = document.createElement("script"),
+	                head = document.head || document.getElementsByTagName("head")[0] || document.documentElement;
+	            
+	            script.async = true;
+	            script.src = "/closed?id=" + this.id + "&_=" + Math.random();
+	            script.onload = script.onreadystatechange = function() {
+	                if (!script.readyState || /loaded|complete/.test(script.readyState)) {
+	                    // Needed in Internet Explorer 8 and 9 when testing cross origin connection
+	                    script.onload = script.onreadystatechange = null;
+	                    if (script.parentNode) {
+	                        script.parentNode.removeChild(script);
+	                    }
+	                }
+	            };
+	            head.insertBefore(script, head.firstChild);
             })
             .on("abort", function() {
                 this.close();

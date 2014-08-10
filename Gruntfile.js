@@ -81,20 +81,34 @@ module.exports = function(grunt) {
     
     grunt.registerTask("test-node", function() {
         var done = this.async();
+        var sockets = {};
+        
+        // To populate sockets
+        vibe.transports._base = vibe.transports.base;
+        vibe.transports.base = function(socket, options) {
+            socket.id = options.id;
+            return vibe.transports._base.apply(this, arguments);
+        };
         
         http.createServer(function(req, res) {
             var urlObj = url.parse(req.url, true);
+            var query = urlObj.query;
             switch (urlObj.pathname) {
             // Executed by the test runner
             case "/open":
                 res.end();
-                var query = urlObj.query;
                 vibe.open(query.uri, {
                     transports: [query.transport], 
                     heartbeat: +query.heartbeat || false, 
                     _heartbeat: +query._heartbeat || false, 
                     reconnect: false, 
                     notifyAbort: true
+                })
+                .on("open", function() {
+                    sockets[this.id] = this;
+                })
+                .on("close", function() {
+                    delete sockets[this.id];
                 })
                 .on("abort", function() {
                     this.close();
@@ -118,6 +132,9 @@ module.exports = function(grunt) {
                         this.send("sre.done", data);
                     });
                 });
+                break;
+            case "/alive":
+                res.end("" + (query.id in sockets));
                 break;
             default:
                 res.statusCode = 404;
@@ -177,19 +194,22 @@ module.exports = function(grunt) {
                 return this.instances[sid];
             }
         };
+        var closed = {};
         var proxy = httpProxy.createProxyServer({});
         
         http.createServer(function(req, res) {
             var urlObj = url.parse(req.url, true);
+            var query = urlObj.query;
             switch (urlObj.pathname) {
-            // Executed by testee.html to start test
+            // Executed by testee.html
+            // to start test
             case "/begin":
                 var session = sessions.issue();
                 res.setHeader("content-type", "text/javascript; utf-8");
                 res.end("begin(" + JSON.stringify(JSON.stringify(session.id)) + ")");
 
                 process.env.VIBE_TEST_SESSION_ID = session.id;
-                var mocha = new Mocha({grep: new RegExp(urlObj.query.transports), reporter: "spec"});
+                var mocha = new Mocha({grep: new RegExp(query.transports), reporter: "spec"});
                 delete require.cache[require.resolve("./node_modules/vibe-protocol/test/client.js")];
                 mocha.addFile("./node_modules/vibe-protocol/test/client.js");
                 mocha.loadFiles();
@@ -222,25 +242,35 @@ module.exports = function(grunt) {
                     });
                 });
                 break;
-            // Executed by testee.html to make a persistent connection waiting a message from /open
+            // to make a persistent connection waiting a message from /open
             case "/poll":
                 res.setHeader("cache-control", "no-cache, no-store, must-revalidate");
                 res.setHeader("pragma", "no-cache");
                 res.setHeader("expires", "0");
                 res.setHeader("content-type", "text/javascript; utf-8");
-                sessions.find(urlObj.query.sid).setResponse(res);
+                sessions.find(query.sid).setResponse(res);
+                break;
+            // to notify some socket is closed
+            case "/closed":
+                res.setHeader("content-type", "text/javascript; utf-8");
+                res.end();
+                closed[query.id] = true;
                 break;
             // Executed by the test runner
             case "/open":
                 res.end();
-                var session = sessions.find(urlObj.query.sid);
-                session.address = urlObj.query.uri.replace("/vibe", "");
+                var session = sessions.find(query.sid);
+                session.address = query.uri.replace("/vibe", "");
                 session.response(function(res) {
                     // Intercept uri to replace localhost with the real ip
-                    urlObj.query.uri = urlObj.query.uri.replace("localhost", ipAddr);
-                    res.end("connect(" + JSON.stringify(JSON.stringify(urlObj.query)) + ")");
+                    query.uri = query.uri.replace("localhost", ipAddr);
+                    res.end("connect(" + JSON.stringify(JSON.stringify(query)) + ")");
                 });
                 break;
+            case "/alive":
+                res.end("" + !(query.id in closed));
+                break;
+            // Static assets
             case "/vibe.js":
                 res.setHeader("content-type", "text/javascript; utf-8");
                 fs.readFile("./vibe.js", function(err, data) {
@@ -261,7 +291,7 @@ module.exports = function(grunt) {
                 break;
             // To test same origin connection
             case "/vibe":
-                proxy.web(req, res, {target: sessions.find(urlObj.query.sid).address, agent: http.globalAgent}, function() {});
+                proxy.web(req, res, {target: sessions.find(query.sid).address, agent: http.globalAgent}, function() {});
                 break;
             default:
                 res.statusCode = 404;
