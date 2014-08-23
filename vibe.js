@@ -745,19 +745,10 @@
             .fire("_message", args);
         };
         self.on("reply", function(reply) {
-            var fn,
-                id = reply.id,
-                data = reply.data,
-                callback = callbacks[id];
-            
-            if (callback) {
-                // callback is [onResolved, onRejected] and +false and + true is 0 and 1, respectively
-                fn = callback[+reply.exception];
-                if (fn) {
-                    fn.call(self, data);
-                }
-                delete callbacks[id];
-            }
+            // callbacks[reply.id] is [onResolved, onRejected]
+            // FYI +false and +true is 0 and 1, respectively
+            callbacks[reply.id][+reply.exception].call(self, reply.data);
+            delete callbacks[reply.id];
         });
         
         return self.open();
