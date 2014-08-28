@@ -51,8 +51,8 @@ module.exports = function(grunt) {
                     config[browser.browserName] = {
                         options: {
                             urls: [
-                                "http://127.0.0.1:9000/testee.html?sameorigin", 
-                                "http://127.0.0.1:9000/testee.html?crossorigin"
+                                "http://127.0.0.1:9000/testee.html?origin=same&runner=sauce", 
+                                "http://127.0.0.1:9000/testee.html?origin=cross&runner=sauce"
                             ],
                             build: process.env.TRAVIS_BUILD_NUMBER,
                             browsers: [],
@@ -149,6 +149,9 @@ module.exports = function(grunt) {
             });
         });
     });
+    // To test locally, type grunt test-browser:local and open a browser to
+    // http://127.0.0.1:9000/testee.html?origin=same to run same-origin tests or
+    // http://127.0.0.1:9000/testee.html?origin=cross to run cross-origin tests
     grunt.registerTask("test-browser", function(local) {
         var done = this.async();
         // Test session helper
