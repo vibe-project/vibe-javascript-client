@@ -3,8 +3,6 @@ var domain = require("domain");
 var fs = require("fs");
 var http = require("http");
 var httpProxy = require("http-proxy");
-var ip = require("ip");
-var ipAddr = ip.address();
 var Mocha = require("mocha");
 var url = require("url");
 var vibe = require("./vibe");
@@ -19,14 +17,13 @@ module.exports = function(grunt) {
                 // They fail rarely
                 {browserName: "internet explorer", version: "11"},
                 {browserName: "internet explorer", version: "10"},
-                {browserName: "chrome", version: "34"},
-                {browserName: "chrome", version: "33"},
-                {browserName: "firefox", version: "29"},
-                {browserName: "firefox", version: "28"},
+                {browserName: "chrome", version: "37"},
+                {browserName: "chrome", version: "36"},
+                {browserName: "firefox", version: "31"},
+                {browserName: "firefox", version: "30"},
                 {browserName: "safari", version: "7"},
                 {browserName: "safari", version: "6"},
                 {browserName: "safari", version: "5"},
-                {browserName: "iphone", version: "7.0"},
 
                 // They fail often in sauce VMs maybe not in your VMs
                 // Failure in cross origin: 
@@ -39,6 +36,7 @@ module.exports = function(grunt) {
                 // They fail certainly
                 // Failure in same and cross origin: 
                 // * should not lose any event in an exchange of one hundred of event
+                {browserName: "iphone", version: "7.0"},
                 {browserName: "iphone", version: "6.0"},
                 
                 // * Internet Explorer 6 and 7 can't be tested because we don't use
@@ -52,22 +50,13 @@ module.exports = function(grunt) {
                 if (!(browser.browserName in config)) {
                     config[browser.browserName] = {
                         options: {
-                            // Disable Sauce connect
-                            tunneled: false,
-                            // Use a real ip address because Sauce connect doesn't work correctly 
                             urls: [
-                                "http://" + ipAddr + ":9000/testee.html?sameorigin", 
-                                "http://" + ipAddr + ":9000/testee.html?crossorigin"
+                                "http://127.0.0.1:9000/testee.html?sameorigin", 
+                                "http://127.0.0.1:9000/testee.html?crossorigin"
                             ],
                             build: process.env.TRAVIS_BUILD_NUMBER,
                             browsers: [],
-                            "max-duration": 240,
-                            sauceConfig: {
-                                "record-video": false, 
-                                "record-screenshots": false, 
-                                "video-upload-on-pass": false, 
-                                "avoid-proxy": true
-                            }
+                            "max-duration": 360
                         }
                     };
                 }
@@ -262,8 +251,8 @@ module.exports = function(grunt) {
                 var session = sessions.find(query.sid);
                 session.address = query.uri.replace("/vibe", "");
                 session.response(function(res) {
-                    // Intercept uri to replace localhost with the real ip
-                    query.uri = query.uri.replace("localhost", ipAddr);
+                    // Sauce prefers 127.0.0.1 to localhost for some reason
+                    query.uri = query.uri.replace("localhost", "127.0.0.1");
                     res.end("connect(" + JSON.stringify(JSON.stringify(query)) + ")");
                 });
                 break;
@@ -315,5 +304,5 @@ module.exports = function(grunt) {
             }
         });
     });
-    grunt.registerTask("test", ["test-node"]);
+    grunt.registerTask("test", ["test-node", "test-browser"]);
 };

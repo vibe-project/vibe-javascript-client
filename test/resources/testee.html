@@ -138,10 +138,13 @@
             })();
             
             var transports = [];
-            if (window.WebSocket &&
-                // Proxy lib doesn't seem to support Safari 5's WebSocket protocol, hixie-76
-                (!browser.safari || browser.vmajor >= 6 || crossOrigin)) {
-                transports.push("ws");
+            // Sauce Connect 4 doesn't support WebSocket
+            if (false) {
+                if (window.WebSocket &&
+                    // Proxy lib doesn't seem to support Safari 5's WebSocket protocol, hixie-76
+                    (!browser.safari || browser.vmajor >= 6 || crossOrigin)) {
+                    transports.push("ws");
+                }
             }
             if (window.EventSource && 
                 (!browser.safari || !crossOrigin || browser.vmajor >= 7)) {

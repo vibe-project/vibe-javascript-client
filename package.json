@@ -5,7 +5,7 @@
   "description": "Vibe client for JavaScript",
   "main": "vibe.js",
   "scripts": {
-    "test": "grunt test"
+    "test": "grunt test --force"
   },
   "repository": {
     "type": "git",
@@ -38,7 +38,6 @@
     "http-proxy": "1.2.0",
     "mocha": "1.21.4",
     "chai": "1.9.1",
-    "grunt-saucelabs": "8.2.0",
-    "ip": "0.3.1"
+    "grunt-saucelabs": "8.3.1"
   }
 }
