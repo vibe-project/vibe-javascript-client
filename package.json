@@ -9,7 +9,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/atmosphere/vibe-javascript-client.git"
+    "url": "https://github.com/vibe-project/vibe-javascript-client.git"
   },
   "keywords": [
     "realtime",
@@ -25,7 +25,7 @@
   },
   "license": "Apache License, Version 2.0",
   "bugs": {
-    "url": "https://github.com/atmosphere/vibe-javascript-client/issues"
+    "url": "https://github.com/vibe-project/vibe-javascript-client/issues"
   },
   "dependencies": {
     "jsdom": "0.11.1",
@@ -33,7 +33,7 @@
     "eventsource": "0.1.2"
   },
   "devDependencies": {
-    "vibe-protocol": "Atmosphere/vibe-protocol#0caab43",
+    "vibe-protocol": "vibe-project/vibe-protocol#0caab43",
     "grunt": "0.4.5",
     "http-proxy": "1.2.0",
     "mocha": "1.21.4",
