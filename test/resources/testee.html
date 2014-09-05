@@ -151,6 +151,8 @@
             if (window.WebSocket &&
                 // Proxy lib doesn't seem to support Safari 5's WebSocket protocol, hixie-76
                 (!browser.safari || browser.vmajor >= 6 || params.origin === "cross") &&
+                // Opera 12 kills the server when testing WebSocket https://github.com/einaros/ws/issues/246
+                !browser.opera &&
                 // Sauce Connect 4 doesn't support WebSocket
                 params.runner !== "sauce") {
                 transports.push("ws");

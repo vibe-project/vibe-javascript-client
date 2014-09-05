@@ -25,13 +25,15 @@ module.exports = function(grunt) {
                 {browserName: "safari", version: "6"},
                 {browserName: "safari", version: "5"},
 
-                // They fail often in sauce VMs maybe not in your VMs
+                // They fail in sauce VMs but maybe not in your VMs
                 // Failure in cross origin: 
                 // * should not lose any event in an exchange of one hundred of event
                 {browserName: "internet explorer", version: "9"},
                 // Failure in same and cross origin: 
                 // * should not lose any event in an exchange of one hundred of event
                 {browserName: "internet explorer", version: "8"},
+                // longpolljsonp's exchange tests
+                {browserName: "opera", version: "12"},
                 
                 // They fail certainly
                 // Failure in same and cross origin: 
@@ -42,7 +44,6 @@ module.exports = function(grunt) {
                 // * Internet Explorer 6 and 7 can't be tested because we don't use
                 // sauce tunnel to run test correctly and can't use localhost and 127.0.0.1 
                 // so that it's not possible to avoid the persistent connection limit per host
-                // * Opera 12 kills the server testing WebSocket https://github.com/einaros/ws/issues/246
                 // * Opera 13+ are not supported due to market share Sauce says
                 // * Android 4 emulators of sauce don't work properly
             ].forEach(function(browser) {
