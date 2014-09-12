@@ -10,4 +10,4 @@
     <dd>Though browser is the first runtime, it runs seamlessly on Node.js.</dd>
 </dl>
 
-Please see the [website](http://atmosphere.github.io/vibe/projects/vibe-javascript-client/) for full documentation. 
+Please see the [website](http://vibe-project.github.io/projects/vibe-javascript-client/) for full documentation. 

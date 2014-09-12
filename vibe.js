@@ -1,6 +1,6 @@
 /*
  * Vibe v3.0.0-Alpha1
- * http://atmosphere.github.io/vibe/projects/vibe-javascript-client/
+ * http://vibe-project.github.io/projects/vibe-javascript-client/
  * 
  * Copyright 2014 The Vibe Project 
  * Licensed under the Apache License, Version 2.0
