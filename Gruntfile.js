@@ -106,21 +106,29 @@ module.exports = function(grunt) {
                 .on("echo", function(data) {
                     this.send("echo", data);
                 })
-                .on("rre.resolve", function(data, reply) {
-                    reply.resolve(data);
+                .on("/reply/inbound", function(data, reply) {
+                    switch (data.type) {
+                    case "resolved":
+                        reply.resolve(data.data);
+                        break;
+                    case "rejected":
+                        reply.reject(data.data);
+                        break;
+                    }
                 })
-                .on("rre.reject", function(data, reply) {
-                    reply.reject(data);
-                })
-                .on("sre.resolve", function(data) {
-                    this.send("sre.resolve", data, function(data) {
-                        this.send("sre.done", data);
-                    });
-                })
-                .on("sre.reject", function(data) {
-                    this.send("sre.reject", data, null, function(data) {
-                        this.send("sre.done", data);
-                    });
+                .on("/reply/outbound", function(data) {
+                    switch (data.type) {
+                    case "resolved":
+                        this.send("test", data.data, function(data) {
+                            this.send("done", data);
+                        });
+                        break;
+                    case "rejected":
+                        this.send("test", data.data, null, function(data) {
+                            this.send("done", data);
+                        });
+                        break;
+                    }
                 });
                 break;
             case "/alive":

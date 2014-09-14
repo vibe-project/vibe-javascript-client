@@ -33,7 +33,7 @@
     "eventsource": "0.1.2"
   },
   "devDependencies": {
-    "vibe-protocol": "vibe-project/vibe-protocol#0caab43",
+    "vibe-protocol": "vibe-project/vibe-protocol#6f99642",
     "grunt": "0.4.5",
     "http-proxy": "1.2.0",
     "mocha": "1.21.4",
