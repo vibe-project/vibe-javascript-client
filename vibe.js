@@ -33,20 +33,20 @@
     // Enables ECMAScript 5's strict mode
     "use strict";
     
-    var // A global identifier
-        guid = 1,
-        // Is the unload event being processed?
-        unloading,
-        // Prototype shortcuts
-        slice = Array.prototype.slice,
-        toString = Object.prototype.toString,
-        hasOwn = Object.prototype.hasOwnProperty,
-        // Variables for Node
-        document = window.document,
-        location = window.location,
-        navigator = window.navigator,
-        // Utility functions
-        util;
+    // A global identifier
+    var guid = 1;
+    // Is the unload event being processed?
+    var unloading;
+    // Prototype shortcuts
+    var slice = Array.prototype.slice;
+    var toString = Object.prototype.toString;
+    var hasOwn = Object.prototype.hasOwnProperty;
+    // Variables for Node
+    var document = window.document;
+    var location = window.location;
+    var navigator = window.navigator;
+    // Utility functions
+    var util;
 
     // Most are inspired by jQuery
     util = {
@@ -82,7 +82,8 @@
             }
         },
         url: function(url, params) {
-            var name, s = [];
+            var name;
+            var s = [];
             params = params || {};
             params._ = guid++;
             // params is supposed to be one-depth object
@@ -182,17 +183,17 @@
     util.corsable = "withCredentials" in util.xhr();
     // Browser sniffing
     util.browser = (function() {
-        var ua = navigator.userAgent.toLowerCase(),
-            browser = {},
-            match =
-                // IE 6-10
-                /(msie) ([\w.]+)/.exec(ua) ||
-                // IE 11+
-                /(trident)(?:.*? rv:([\w.]+)|)/.exec(ua) ||
-                // Opera
-                /(opera)(?:.*version|)[ \/]([\w.]+)/.exec(ua) || 
-                // Safari
-                ua.indexOf("android") < 0 && /version\/(.+) (safari)/.exec(ua) || [];
+        var ua = navigator.userAgent.toLowerCase();
+        var browser = {};
+        var match =
+            // IE 6-10
+            /(msie) ([\w.]+)/.exec(ua) ||
+            // IE 11+
+            /(trident)(?:.*? rv:([\w.]+)|)/.exec(ua) ||
+            // Opera
+            /(opera)(?:.*version|)[ \/]([\w.]+)/.exec(ua) || 
+            // Safari
+            ua.indexOf("android") < 0 && /version\/(.+) (safari)/.exec(ua) || [];
         
         browser[match[1] || ""] = true;
         browser.version = match[2] || "0";
@@ -207,69 +208,69 @@
     // Callbacks object
     // inspired by jQuery.Callbacks
     function Callbacks(deferred) {
-        var locked,
-            memory,
-            firing,
-            firingStart,
-            firingLength,
-            firingIndex,
-            list = [],
-            fire = function(context, args) {
-                args = args || [];
-                memory = !deferred || [context, args];
-                firing = true;
-                firingIndex = firingStart || 0;
-                firingStart = 0;
-                firingLength = list.length;
-                for (; firingIndex < firingLength && !locked; firingIndex++) {
-                    list[firingIndex].apply(context, args);
+        var locked;
+        var memory;
+        var firing;
+        var firingStart;
+        var firingLength;
+        var firingIndex;
+        var list = [];
+        var fire = function(context, args) {
+            args = args || [];
+            memory = !deferred || [context, args];
+            firing = true;
+            firingIndex = firingStart || 0;
+            firingStart = 0;
+            firingLength = list.length;
+            for (; firingIndex < firingLength && !locked; firingIndex++) {
+                list[firingIndex].apply(context, args);
+            }
+            firing = false;
+        };
+        var self = {
+            add: function(fn) {
+                var length = list.length;
+                
+                list.push(fn);
+                if (firing) {
+                    firingLength = list.length;
+                } else if (!locked && memory && memory !== true) {
+                    firingStart = length;
+                    fire(memory[0], memory[1]);
                 }
-                firing = false;
             },
-            self = {
-                add: function(fn) {
-                    var length = list.length;
-                    
-                    list.push(fn);
-                    if (firing) {
-                        firingLength = list.length;
-                    } else if (!locked && memory && memory !== true) {
-                        firingStart = length;
-                        fire(memory[0], memory[1]);
-                    }
-                },
-                remove: function(fn) {
-                    var i;
-                    
-                    for (i = 0; i < list.length; i++) {
-                        if (fn === list[i] || (fn.guid && fn.guid === list[i].guid)) {
-                            if (firing) {
-                                if (i <= firingLength) {
-                                    firingLength--;
-                                    if (i <= firingIndex) {
-                                        firingIndex--;
-                                    }
+            remove: function(fn) {
+                var i;
+                
+                for (i = 0; i < list.length; i++) {
+                    if (fn === list[i] || (fn.guid && fn.guid === list[i].guid)) {
+                        if (firing) {
+                            if (i <= firingLength) {
+                                firingLength--;
+                                if (i <= firingIndex) {
+                                    firingIndex--;
                                 }
                             }
-                            list.splice(i--, 1);
                         }
+                        list.splice(i--, 1);
                     }
-                },
-                fire: function(context, args) {
-                    if (!locked && !firing && !(deferred && memory)) {
-                        fire(context, args);
-                    }
-                },
-                lock: function() {
-                    locked = true;
-                },
-                locked: function() {
-                    return !!locked;
-                },
-                unlock: function() {
-                    locked = memory = firing = firingStart = firingLength = firingIndex = undefined;
                 }
-            };
+            },
+            fire: function(context, args) {
+                if (!locked && !firing && !(deferred && memory)) {
+                    fire(context, args);
+                }
+            },
+            lock: function() {
+                locked = true;
+            },
+            locked: function() {
+                return !!locked;
+            },
+            unlock: function() {
+                locked = memory = firing = firingStart = firingLength = firingIndex = undefined;
+            }
+        };
         
         return self;
     }
@@ -280,21 +281,21 @@
         url = util.makeAbsolute(url);
         
         // Options
-        var i,
-            // URI parts
-            parts = /^([\w\+\.\-]+:)(?:\/\/([^\/?#:]*)(?::(\d+))?)?/.exec(url.toLowerCase()),
-            // Default options
-            defaults = {
-                transports: ["ws", "stream", "longpoll"],
-                timeout: false,
-                heartbeat: 20000,
-                _heartbeat: 5000,
-                sharing: false,
-                reconnect: function(lastDelay) {
-                    return 2 * (lastDelay || 250);
-                },
-                xdrURL: null
-            };
+        var i;
+        // URI parts
+        var parts = /^([\w\+\.\-]+:)(?:\/\/([^\/?#:]*)(?::(\d+))?)?/.exec(url.toLowerCase());
+        // Default options
+        var defaults = {
+            transports: ["ws", "stream", "longpoll"],
+            timeout: false,
+            heartbeat: 20000,
+            _heartbeat: 5000,
+            sharing: false,
+            reconnect: function(lastDelay) {
+                return 2 * (lastDelay || 250);
+            },
+            xdrURL: null
+        };
         
         // Overrides defaults
         if (options) {
@@ -409,102 +410,103 @@
             
             // TODO review
             function share() {
-                var traceTimer,
-                    server,
-                    name = "socket-" + url,
-                    servers = {
-                        // Powered by the storage event and the localStorage
-                        // http://www.w3.org/TR/webstorage/#event-storage
-                        storage: function() {
-                            var storage = window.localStorage;
-                            // The storage event of Internet Explorer works strangely
-                            // TODO test Internet Explorer 11
-                            if (util.browser.msie) {
-                                return;
-                            }
-                            return {
-                                init: function() {
-                                    function onstorage(event) {
-                                        // When a deletion, newValue initialized to null
-                                        if (event.key === name && event.newValue) {
-                                            listener(event.newValue);
-                                        }
-                                    }
-                                    // Handles the storage event
-                                    util.on(window, "storage", onstorage);
-                                    self.once("close", function() {
-                                        util.off(window, "storage", onstorage);
-                                        // Defers again to clean the storage
-                                        self.once("close", function() {
-                                            storage.removeItem(name);
-                                            storage.removeItem(name + "-opened");
-                                            storage.removeItem(name + "-children");
-                                        });
-                                    });
-                                },
-                                broadcast: function(obj) {
-                                    var string = util.stringifyJSON(obj);
-                                    storage.setItem(name, string);
-                                    setTimeout(function() {
-                                        listener(string);
-                                    }, 50);
-                                },
-                                get: function(key) {
-                                    return util.parseJSON(storage.getItem(name + "-" + key));
-                                },
-                                set: function(key, value) {
-                                    storage.setItem(name + "-" + key, util.stringifyJSON(value));
-                                }
-                            };
-                        },
-                        // Powered by the window.open method
-                        // https://developer.mozilla.org/en/DOM/window.open
-                        windowref: function() {
-                            // Internet Explorer raises an invalid argument error
-                            // when calling the window.open method with the name containing non-word characters
-                            var neim = name.replace(/\W/g, ""),
-                                container = document.getElementById(neim),
-                                win;
-                            if (!container) {
-                                container = document.createElement("div");
-                                container.id = neim;
-                                container.style.display = "none";
-                                container.innerHTML = '<iframe name="' + neim + '" />';
-                                document.body.appendChild(container);
-                            }
-                            win = container.firstChild.contentWindow;
-                            return {
-                                init: function() {
-                                    // Callbacks from different windows
-                                    win.callbacks = [listener];
-                                    // In Internet Explorer 8 and less, only string argument can be safely passed to the function in other window
-                                    win.fire = function(string) {
-                                        var i;
-                                        for (i = 0; i < win.callbacks.length; i++) {
-                                            win.callbacks[i](string);
-                                        }
-                                    };
-                                },
-                                broadcast: function(obj) {
-                                    if (!win.closed && win.fire) {
-                                        win.fire(util.stringifyJSON(obj));
-                                    }
-                                },
-                                get: function(key) {
-                                    return !win.closed ? win[key] : null;
-                                },
-                                set: function(key, value) {
-                                    if (!win.closed) {
-                                        win[key] = value;
-                                    }
-                                }
-                            };
+                var traceTimer;
+                var server;
+                var name = "socket-" + url;
+                var servers = {
+                    // Powered by the storage event and the localStorage
+                    // http://www.w3.org/TR/webstorage/#event-storage
+                    storage: function() {
+                        var storage = window.localStorage;
+                        // The storage event of Internet Explorer works strangely
+                        // TODO test Internet Explorer 11
+                        if (util.browser.msie) {
+                            return;
                         }
-                    };
+                        return {
+                            init: function() {
+                                function onstorage(event) {
+                                    // When a deletion, newValue initialized to null
+                                    if (event.key === name && event.newValue) {
+                                        listener(event.newValue);
+                                    }
+                                }
+                                // Handles the storage event
+                                util.on(window, "storage", onstorage);
+                                self.once("close", function() {
+                                    util.off(window, "storage", onstorage);
+                                    // Defers again to clean the storage
+                                    self.once("close", function() {
+                                        storage.removeItem(name);
+                                        storage.removeItem(name + "-opened");
+                                        storage.removeItem(name + "-children");
+                                    });
+                                });
+                            },
+                            broadcast: function(obj) {
+                                var string = util.stringifyJSON(obj);
+                                storage.setItem(name, string);
+                                setTimeout(function() {
+                                    listener(string);
+                                }, 50);
+                            },
+                            get: function(key) {
+                                return util.parseJSON(storage.getItem(name + "-" + key));
+                            },
+                            set: function(key, value) {
+                                storage.setItem(name + "-" + key, util.stringifyJSON(value));
+                            }
+                        };
+                    },
+                    // Powered by the window.open method
+                    // https://developer.mozilla.org/en/DOM/window.open
+                    windowref: function() {
+                        // Internet Explorer raises an invalid argument error
+                        // when calling the window.open method with the name containing non-word characters
+                        var neim = name.replace(/\W/g, "");
+                        var container = document.getElementById(neim);
+                        var win;
+                        if (!container) {
+                            container = document.createElement("div");
+                            container.id = neim;
+                            container.style.display = "none";
+                            container.innerHTML = '<iframe name="' + neim + '" />';
+                            document.body.appendChild(container);
+                        }
+                        win = container.firstChild.contentWindow;
+                        return {
+                            init: function() {
+                                // Callbacks from different windows
+                                win.callbacks = [listener];
+                                // In Internet Explorer 8 and less, only string argument can be safely passed to the function in other window
+                                win.fire = function(string) {
+                                    var i;
+                                    for (i = 0; i < win.callbacks.length; i++) {
+                                        win.callbacks[i](string);
+                                    }
+                                };
+                            },
+                            broadcast: function(obj) {
+                                if (!win.closed && win.fire) {
+                                    win.fire(util.stringifyJSON(obj));
+                                }
+                            },
+                            get: function(key) {
+                                return !win.closed ? win[key] : null;
+                            },
+                            set: function(key, value) {
+                                if (!win.closed) {
+                                    win[key] = value;
+                                }
+                            }
+                        };
+                    }
+                };
                 
                 // Receives send and close command from the children
                 function listener(string) {
-                    var data, command = util.parseJSON(string);
+                    var data;
+                    var command = util.parseJSON(string);
                     if (command.target === "p") {
                         switch (command.type) {
                         case "send":
@@ -596,9 +598,9 @@
             // From preparing, connecting or opened state
             state = "closed";
             
-            var type, 
-                event, 
-                order = events.close.order;
+            var type;
+            var event;
+            var order = events.close.order;
             
             // Locks event whose order is lower than close event
             for (type in events) {
@@ -629,16 +631,17 @@
         });
         
         // Networking
-        var // Transport
-            transport,
-            isSessionTransport,
-            // Reconnection
-            reconnectTimer,
-            reconnectDelay,
-            reconnectTry;        
+        // Transport
+        var transport;
+        var isSessionTransport;
+        // Reconnection
+        var reconnectTimer;
+        var reconnectDelay;
+        var reconnectTry;        
         // Establishes a connection
         self.open = function() {
-            var type, candidates;
+            var type;
+            var candidates;
             
             // Cancels the scheduled connection
             clearTimeout(reconnectTimer);
@@ -722,23 +725,23 @@
         // For internal use only
         // receives an event from the server via the connection
         self.receive = function(data) {
-            var latch, 
-                // Inbound event
-                event = util.parseJSON(data), 
-                args = [event.type, event.data, !event.reply ? null : {
-                    resolve: function(value) {
-                        if (!latch) {
-                            latch = true;
-                            self.send("reply", {id: event.id, data: value, exception: false});
-                        }
-                    },
-                    reject: function(reason) {
-                        if (!latch) {
-                            latch = true;
-                            self.send("reply", {id: event.id, data: reason, exception: true});
-                        }
+            var latch;
+            // Inbound event
+            var event = util.parseJSON(data); 
+            var args = [event.type, event.data, !event.reply ? null : {
+                resolve: function(value) {
+                    if (!latch) {
+                        latch = true;
+                        self.send("reply", {id: event.id, data: value, exception: false});
                     }
-                }];
+                },
+                reject: function(reason) {
+                    if (!latch) {
+                        latch = true;
+                        self.send("reply", {id: event.id, data: reason, exception: true});
+                    }
+                }
+            }];
             
             return self.fire.apply(self, args)
             // _message event for shared sockets
@@ -755,100 +758,92 @@
     }
 
     // Transport object
-    var transports,
-        // Callback names used in longpolljsonp
-        jsonpCallbacks = [];
+    var transports;
+    // Callback names used in longpolljsonp
+    var jsonpCallbacks = [];
     
     transports = {
         // Session socket for connection sharing
         // TODO review
         session: function(socket, options) {
-            var trace,
-                orphan,
-                connector,
-                name = "socket-" + options.url,
-                connectors = {
-                    storage: function() {
-                        // The storage event of Internet Explorer works strangely
-                        // TODO test Internet Explorer 11
-                        if (util.browser.msie) {
-                            return;
-                        }
-                        
-                        var storage = window.localStorage;
-                        
-                        function get(key) {
-                            return util.parseJSON(storage.getItem(name + "-" + key));
-                        }
-                        
-                        function set(key, value) {
-                            storage.setItem(name + "-" + key, util.stringifyJSON(value));
-                        }
-                        
-                        return {
-                            init: function() {
-                                function onstorage(event) {
-                                    if (event.key === name && event.newValue) {
-                                        listener(event.newValue);
-                                    }
-                                }
-                                
-                                set("children", get("children").concat([options.id]));
-                                util.on(window, "storage", onstorage);
-                                socket.once("close", function() {
-                                    var children = get("children");
-                                    util.off(window, "storage", onstorage);
-                                    if (children) {
-                                        if (removeFromArray(children, options.id)) {
-                                            set("children", children);
-                                        }
-                                    }
-                                });
-                                
-                                return get("opened");
-                            },
-                            broadcast: function(obj) {
-                                var string = util.stringifyJSON(obj);
-                                storage.setItem(name, string);
-                                setTimeout(function() {
-                                    listener(string);
-                                }, 50);
-                            }
-                        };
-                    },
-                    windowref: function() {
-                        var win = window.open("", name.replace(/\W/g, ""));
-                        
-                        if (!win || win.closed || !win.callbacks) {
-                            return;
-                        }
-                        return {
-                            init: function() {
-                                win.callbacks.push(listener);
-                                win.children.push(options.id);
-                                socket.once("close", function() {
-                                    // Removes traces only if the parent is alive
-                                    if (!orphan) {
-                                        removeFromArray(win.callbacks, listener);
-                                        removeFromArray(win.children, options.id);
-                                    }
-                                });
-                                
-                                return win.opened;
-                            },
-                            broadcast: function(obj) {
-                                if (!win.closed && win.fire) {
-                                    win.fire(util.stringifyJSON(obj));
-                                }
-                            }
-                        };
+            var trace;
+            var orphan;
+            var connector;
+            var name = "socket-" + options.url;
+            var connectors = {
+                storage: function() {
+                    // The storage event of Internet Explorer works strangely
+                    // TODO test Internet Explorer 11
+                    if (util.browser.msie) {
+                        return;
                     }
-                };
+                    
+                    var storage = window.localStorage;
+                    var get = function(key) {
+                        return util.parseJSON(storage.getItem(name + "-" + key));
+                    };
+                    var set = function(key, value) {
+                        storage.setItem(name + "-" + key, util.stringifyJSON(value));
+                    };
+                    return {
+                        init: function() {
+                            function onstorage(event) {
+                                if (event.key === name && event.newValue) {
+                                    listener(event.newValue);
+                                }
+                            }
+                            
+                            set("children", get("children").concat([options.id]));
+                            util.on(window, "storage", onstorage);
+                            socket.once("close", function() {
+                                var children = get("children");
+                                util.off(window, "storage", onstorage);
+                                if (children) {
+                                    if (removeFromArray(children, options.id)) {
+                                        set("children", children);
+                                    }
+                                }
+                            });
+                            return get("opened");
+                        },
+                        broadcast: function(obj) {
+                            var string = util.stringifyJSON(obj);
+                            storage.setItem(name, string);
+                            setTimeout(function() {
+                                listener(string);
+                            }, 50);
+                        }
+                    };
+                },
+                windowref: function() {
+                    var win = window.open("", name.replace(/\W/g, ""));
+                    if (!win || win.closed || !win.callbacks) {
+                        return;
+                    }
+                    return {
+                        init: function() {
+                            win.callbacks.push(listener);
+                            win.children.push(options.id);
+                            socket.once("close", function() {
+                                // Removes traces only if the parent is alive
+                                if (!orphan) {
+                                    removeFromArray(win.callbacks, listener);
+                                    removeFromArray(win.children, options.id);
+                                }
+                            });
+                            return win.opened;
+                        },
+                        broadcast: function(obj) {
+                            if (!win.closed && win.fire) {
+                                win.fire(util.stringifyJSON(obj));
+                            }
+                        }
+                    };
+                }
+            };
             
             function removeFromArray(array, val) {
-                var i,
-                    length = array.length;
-                
+                var i, length = array.length;
                 for (i = 0; i < length; i++) {
                     if (array[i] === val) {
                         array.splice(i, 1);
@@ -918,10 +913,10 @@
             
             return {
                 open: function() {
-                    var traceTimer,
-                        parentOpened,
-                        timeout = options.timeout,
-                        heartbeat = options.heartbeat;
+                    var traceTimer;
+                    var parentOpened;
+                    var timeout = options.timeout;
+                    var heartbeat = options.heartbeat;
                     
                     // Prevents side effects
                     options.timeout = options.heartbeat = false;
@@ -971,9 +966,9 @@
         },
         // WebSocket
         ws: function(socket, options) {
-            var ws,
-                WebSocket = window.WebSocket,
-                self = transports.base(socket, options);
+            var ws;
+            var WebSocket = window.WebSocket;
+            var self = transports.base(socket, options);
             
             if (!WebSocket) {
                 return;
@@ -982,8 +977,7 @@
             self.open = function() {
                 // Changes options.url's protocol part to ws or wss
                 // options.url is absolute path
-                var url = self.uri.open().replace(/^http/, "ws");
-                
+                var url = self.uri.open().replace(/^http/, "ws");                
                 ws = new WebSocket(url);
                 ws.onopen = function() {
                     socket.fire("open");
@@ -1031,9 +1025,9 @@
             } :
             // By HTMLFormElement
             function(data) {
-                var iframe,
-                    textarea,
-                    form = document.createElement("form");
+                var iframe;
+                var textarea;
+                var form = document.createElement("form");
                 form.action = util.url(options.url, {id: options.id});
                 form.target = "socket-" + (guid++);
                 form.method = "POST";
@@ -1056,8 +1050,8 @@
                 self.abort();
                 // Sends the abort request to the server
                 // this request is supposed to run in unloading event so script tag should be used
-                var script = document.createElement("script"),
-                    head = document.head || document.getElementsByTagName("head")[0] || document.documentElement;
+                var script = document.createElement("script");
+                var head = document.head || document.getElementsByTagName("head")[0] || document.documentElement;
                 script.async = false;
                 script.src = util.url(options.url, {id: options.id, when: "abort"});
                 script.onload = script.onreadystatechange = function() {
@@ -1074,17 +1068,16 @@
         },
         // Streaming - Server-Sent Events
         sse: function(socket, options) {
-            var es,
-                EventSource = window.EventSource,
-                self = transports.httpbase(socket, options);
+            var es;
+            var EventSource = window.EventSource;
+            var self = transports.httpbase(socket, options);
             
             if (!EventSource || (options.crossOrigin && util.browser.safari && util.browser.vmajor < 7)) {
                 return;
             }
             
             self.open = function() {
-                var url = self.uri.open();
-                
+                var url = self.uri.open();                
                 es = new EventSource(url, {withCredentials: true});
                 es.onopen = function() {
                     socket.fire("open");
@@ -1105,8 +1098,8 @@
         },
         // Streaming Base
         streambase: function(socket, options) {
-            var buffer = "",
-                self = transports.httpbase(socket, options);
+            var buffer = "";
+            var self = transports.httpbase(socket, options);
             
             // The detail about parsing is explained in the reference implementation
             self.parse = function(chunk) {
@@ -1115,9 +1108,9 @@
                 chunk = chunk.replace(/^\s+/, "");
                 // The chunk should be not empty for correct parsing, 
                 if (chunk) {
-                    var i, 
-                        // String.prototype.split with string separator is reliable cross-browser
-                        lines = (buffer + chunk).split("\n\n");
+                    var i; 
+                    // String.prototype.split with string separator is reliable cross-browser
+                    var lines = (buffer + chunk).split("\n\n");
                     
                     for (i = 0; i < lines.length - 1; i++) {
                         socket.receive(lines[i].substring("data: ".length));
@@ -1129,17 +1122,17 @@
         },
         // Streaming - XMLHttpRequest
         streamxhr: function(socket, options) {
-            var xhr,
-                self = transports.streambase(socket, options);
+            var xhr;
+            var self = transports.streambase(socket, options);
             
             if ((util.browser.msie && util.browser.vmajor < 10) || (util.browser.opera && util.browser.vmajor < 13) || (options.crossOrigin && !util.corsable)) {
                 return;
             }
             
             self.open = function() {
-                var index, 
-                    length, 
-                    url = self.uri.open();
+                var index;
+                var length; 
+                var url = self.uri.open();
                 
                 xhr = util.xhr();
                 xhr.onreadystatechange = function() {
@@ -1169,18 +1162,18 @@
         },
         // Streaming - XDomainRequest
         streamxdr: function(socket, options) {
-            var xdr,
-                XDomainRequest = window.XDomainRequest,
-                self = transports.streambase(socket, options);
+            var xdr;
+            var XDomainRequest = window.XDomainRequest;
+            var self = transports.streambase(socket, options);
             
             if (!XDomainRequest || !options.xdrURL) {
                 return;
             }
             
             self.open = function() {
-                var index, 
-                    length, 
-                    url = options.xdrURL.call(socket, self.uri.open());
+                var index;
+                var length; 
+                var url = options.xdrURL.call(socket, self.uri.open());
                 
                 xdr = new XDomainRequest();
                 xdr.onprogress = function() {
@@ -1209,10 +1202,10 @@
         },
         // Streaming - Iframe
         streamiframe: function(socket, options) {
-            var doc,
-                stop,
-                ActiveXObject = window.ActiveXObject,
-                self = transports.streambase(socket, options);
+            var doc;
+            var stop;
+            var ActiveXObject = window.ActiveXObject;
+            var self = transports.streambase(socket, options);
             
             if (!ActiveXObject || options.crossOrigin) {
                 return;
@@ -1226,9 +1219,9 @@
             }
             
             self.open = function() {
-                var iframe, 
-                    cdoc,
-                    url = self.uri.open();
+                var iframe; 
+                var cdoc;
+                var url = self.uri.open();
                 
                 function iterate(fn) {
                     var timeoutId;
@@ -1259,8 +1252,8 @@
                     var container;
                     
                     function readDirty() {
-                        var text,
-                            clone = container.cloneNode(true);
+                        var text;
+                        var clone = container.cloneNode(true);
                         // Adds a character not CR and LF to circumvent an Internet Explorer bug
                         // If the contents of an element ends with one or more CR or LF, Internet Explorer ignores them in the innerText property
                         clone.appendChild(cdoc.createTextNode("."));
@@ -1315,10 +1308,10 @@
                     function poll(eventIds) {
                         self.connect(self.uri.poll(eventIds), function(data) {
                             if (data) {
-                                var i,
-                                    eventIds = [], 
-                                    obj = util.parseJSON(data), 
-                                    array = !util.isArray(obj) ? [obj] : obj;
+                                var i;
+                                var eventIds = []; 
+                                var obj = util.parseJSON(data); 
+                                var array = !util.isArray(obj) ? [obj] : obj;
                                     
                                 for (i = 0; i < array.length; i++) {
                                     eventIds.push(array[i].id);
@@ -1341,8 +1334,8 @@
         },
         // Long polling - AJAX
         longpollajax: function(socket, options) {
-            var xhr,
-                self = transports.longpollbase(socket, options);
+            var xhr;
+            var self = transports.longpollbase(socket, options);
             
             if (options.crossOrigin && !util.corsable) {
                 return;
@@ -1373,9 +1366,9 @@
         },
         // Long polling - XDomainRequest
         longpollxdr: function(socket, options) {
-            var xdr,
-                XDomainRequest = window.XDomainRequest,
-                self = transports.longpollbase(socket, options);
+            var xdr;
+            var XDomainRequest = window.XDomainRequest;
+            var self = transports.longpollbase(socket, options);
             
             if (!XDomainRequest || !options.xdrURL) {
                 return;
@@ -1400,9 +1393,9 @@
         },
         // Long polling - JSONP
         longpolljsonp: function(socket, options) {
-            var script,
-                callback = jsonpCallbacks.pop() || ("socket_" + (guid++)),
-                self = transports.longpollbase(socket, options);
+            var script;
+            var callback = jsonpCallbacks.pop() || ("socket_" + (guid++));
+            var self = transports.longpollbase(socket, options);
             
             // Attaches callback
             window[callback] = function(data) {
@@ -1453,10 +1446,10 @@
         }
     };
     
-    var // Defines the vibe
-        vibe = {},
-        // Socket instances
-        sockets = [];
+    // Defines the vibe
+    var vibe = {};
+    // Socket instances
+    var sockets = [];
 
     // Creates a new socket and connects to the given url
     vibe.open = function(url, options) {
@@ -1472,7 +1465,8 @@
     // For browser environment
     util.on(window, "unload", function() {
         unloading = true;
-        var i, socket;
+        var i;
+        var socket;
         for (i = 0; i < sockets.length; i++) {
             socket = sockets[i];
             // Closes a socket as the document is unloaded
@@ -1482,7 +1476,8 @@
         }
     });
     util.on(window, "online", function() {
-        var i, socket;
+        var i;
+        var socket;
         for (i = 0; i < sockets.length; i++) {
             socket = sockets[i];
             // Opens a socket because of no reason to wait
@@ -1492,7 +1487,8 @@
         }
     });
     util.on(window, "offline", function() {
-        var i, socket;
+        var i;
+        var socket;
         for (i = 0; i < sockets.length; i++) {
             socket = sockets[i];
             // Fires a close event immediately
