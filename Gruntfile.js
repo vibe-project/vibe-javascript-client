@@ -164,7 +164,7 @@ module.exports = function(grunt) {
     // http://127.0.0.1:9000/testee.html?origin=cross to run cross-origin tests
     grunt.registerTask("test-browser", function(local) {
         var done = this.async();
-        // Test session helper
+        // Test session helper for concurrent test
         var sessions = {
             instances: {},
             issue: function() {
@@ -229,7 +229,13 @@ module.exports = function(grunt) {
                     // https://github.com/axemclion/grunt-saucelabs#test-result-details-with-mocha
                     var failedTests = [];
                     runner.on("end", function() {
-                        uncaughtExceptionHandlers.forEach(process.on.bind(process, "uncaughtException"));
+                        uncaughtExceptionHandlers.forEach(function(handler) {
+                            // To prevent possible EventEmitter memory leak
+                            var handlers = process.listeners("uncaughtException");
+                            if (handlers.indexOf(handler) === -1) {
+                                process.on("uncaughtException", handler);
+                            }
+                        });
                         var mochaResults = runner.stats;
                         mochaResults.reports = failedTests;
                         session.response(function(res) {
