@@ -28,17 +28,17 @@
     "url": "https://github.com/vibe-project/vibe-javascript-client/issues"
   },
   "dependencies": {
-    "jsdom": "0.11.1",
+    "jsdom": "1.0.2",
     "ws": "0.4.32",
-    "eventsource": "0.1.2"
+    "eventsource": "0.1.3"
   },
   "devDependencies": {
     "vibe-protocol": "vibe-project/vibe-protocol#44cc392",
     "grunt": "0.4.5",
-    "http-proxy": "1.2.0",
+    "http-proxy": "1.5.3",
     "mocha": "1.21.4",
     "chai": "1.9.1",
-    "grunt-saucelabs": "8.3.1",
+    "grunt-saucelabs": "8.3.2",
     "minimist": "1.1.0"
   }
 }

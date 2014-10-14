@@ -18,7 +18,7 @@
     } else if (typeof exports === "object") {
         // Node
         // prepare the window object
-        var window = require("jsdom").jsdom().createWindow();
+        var window = require("jsdom").jsdom().parentWindow;
         window.WebSocket = require("ws");
         window.EventSource = require("eventsource");
         module.exports = factory(window);
