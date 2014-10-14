@@ -47,7 +47,10 @@
     var navigator = window.navigator;
     // Utility functions
     var util;
-
+    // Callback names for JSONP
+    var jsonpCallbacks = [];
+    var head = document.head || document.getElementsByTagName("head")[0] || document.documentElement;
+    
     // Most are inspired by jQuery
     util = {
         now: Date.now || function() {
@@ -286,14 +289,12 @@
         var parts = /^([\w\+\.\-]+:)(?:\/\/([^\/?#:]*)(?::(\d+))?)?/.exec(url.toLowerCase());
         // Default options
         var defaults = {
-            transports: ["ws", "stream", "longpoll"],
-            timeout: false,
-            heartbeat: 20000,
-            _heartbeat: 5000,
-            sharing: false,
             reconnect: function(lastDelay) {
                 return 2 * (lastDelay || 250);
             },
+            sharing: false,
+            timeout: false,
+            transports: null,
             xdrURL: null
         };
         
@@ -308,12 +309,6 @@
         // Strictly speaking, the following values are not option
         // but assigns them to options for convenience of transport
         options.url = url;
-        // Logic borrowed 
-        // from http://stackoverflow.com/questions/105034/how-to-create-a-guid-uuid-in-javascript/2117523#2117523
-        options.id = "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, function(c) {
-            var r = Math.random() * 16 | 0, v = c === "x" ? r : (r & 0x3 | 0x8);
-            return v.toString(16);
-        });
         options.crossOrigin = !!(parts && (
             // protocol 
             parts[1] != location.protocol ||
@@ -641,7 +636,6 @@
         // Establishes a connection
         self.open = function() {
             var type;
-            var candidates;
             
             // Cancels the scheduled connection
             clearTimeout(reconnectTimer);
@@ -653,40 +647,102 @@
             transport = isSessionTransport = null;
             // From null or waiting state
             state = "preparing";
-            
-            candidates = slice.call(options.transports);
-            // Check if possible to make use of a shared socket
-            if (options.sharing) {
-                candidates.unshift("session");
-            }
-            while (!transport && candidates.length) {
-                type = candidates.shift();
-                switch (type) {
-                case "stream":
-                    candidates.unshift("sse", "streamxhr", "streamxdr", "streamiframe");
-                    break;
-                case "longpoll":
-                    candidates.unshift("longpollajax", "longpollxdr", "longpolljsonp");
-                    break;
-                default:
-                    // A transport instance will be null if it can't run on this environment
-                    transport = transports[type](self, options);
-                    break;
-                }
-            }
             // Increases the number of reconnection attempts
             if (reconnectTry) {
                 reconnectTry++;
             }
-            // Fires the connecting event and connects
-            if (transport) {
-                options.transport = type;
-                isSessionTransport = type === "session";
-                self.fire("connecting");
-                transport.open();
-            } else {
-                self.fire("close", "notransport");
-            }
+            
+            // Starts handshaking to negotiate the protocol
+            (function(done, fail) {
+                var url = util.url(options.url, {when: "handshake"});
+                if (!options.crossOrigin || util.corsable) {
+                    var xhr = util.xhr();
+                    xhr.onreadystatechange = function() {
+                        // Avoids c00c023f error on Internet Explorer 9
+                        if (xhr.readyState === 4) {
+                            if (xhr.status === 200) {
+                                done(util.parseJSON(xhr.responseText));
+                            } else {
+                                fail();
+                            }
+                        }
+                    };
+                    xhr.open("GET", url);
+                    if (util.corsable) {
+                        xhr.withCredentials = true;
+                    }
+                    xhr.send(null);
+                } else {
+                    // If a given url is cross origin and a browser doesn't implement CORS, use JSONP
+                    var callback = jsonpCallbacks.pop() || ("socket_" + (guid++));
+                    // Attaches callback
+                    window[callback] = function(data) {
+                        done(util.parseJSON(data));
+                        // To prevent memory leak in some browsers, assign null and return callback name
+                        window[callback] = null;
+                        jsonpCallbacks.push(callback);
+                    };
+                    var script = document.createElement("script");
+                    script.async = true;
+                    script.src = url + "&callback=" + callback;
+                    script.onload = script.onreadystatechange = function() {
+                        if (!script.readyState || /loaded|complete/.test(script.readyState)) {
+                            script.onload = script.onreadystatechange = null;
+                            if (script.parentNode) {
+                                script.parentNode.removeChild(script);
+                            }
+                        }
+                    };
+                    head.insertBefore(script, head.firstChild);
+                }
+            })(function(result) {
+                // Assign a newly issued identifier for this socket
+                options.id = result.id;
+                // An heartbeat option can't be set by user
+                options.heartbeat = result.heartbeat;
+                // TODO
+                if (!options.transports) {
+                    options.transports = result.transports;
+                }
+                // TODO for testing
+                if (result._heartbeat) {
+                    options._heartbeat = result._heartbeat;
+                }
+                
+                // Use transports a user set if it exists
+                var candidates = slice.call(options.transports);
+                // Check if possible to make use of a shared socket
+                if (options.sharing) {
+                    candidates.unshift("session");
+                }
+                while (!transport && candidates.length) {
+                    type = candidates.shift();
+                    switch (type) {
+                    case "stream":
+                        candidates.unshift("sse", "streamxhr", "streamxdr", "streamiframe");
+                        break;
+                    case "longpoll":
+                        candidates.unshift("longpollajax", "longpollxdr", "longpolljsonp");
+                        break;
+                    default:
+                        // A transport instance will be null if it can't run on this environment
+                        transport = transports[type](self, options);
+                        break;
+                    }
+                }
+                // Fires the connecting event and connects
+                if (transport) {
+                    options.transport = type;
+                    isSessionTransport = type === "session";
+                    self.fire("connecting");
+                    transport.open();
+                } else {
+                    self.fire("close", "notransport");
+                }
+            }, function() {
+                // TODO fails....
+                self.fire("close", "error");
+            });
             return this;
         };
         // Disconnects the connection
@@ -757,12 +813,8 @@
         return self.open();
     }
 
-    // Transport object
-    var transports;
-    // Callback names used in longpolljsonp
-    var jsonpCallbacks = [];
-    
-    transports = {
+    // A group of transport object
+    var transports = {
         // Session socket for connection sharing
         // TODO review
         session: function(socket, options) {
@@ -959,7 +1011,7 @@
             var self = {};
             self.uri = {
                 open: function() {
-                    return util.url(options.url, {id: options.id, when: "open", transport: options.transport, heartbeat: options.heartbeat});
+                    return util.url(options.url, {id: options.id, when: "open", transport: options.transport});
                 }
             };
             return self;
@@ -1051,7 +1103,6 @@
                 // Sends the abort request to the server
                 // this request is supposed to run in unloading event so script tag should be used
                 var script = document.createElement("script");
-                var head = document.head || document.getElementsByTagName("head")[0] || document.documentElement;
                 script.async = false;
                 script.src = util.url(options.url, {id: options.id, when: "abort"});
                 script.onload = script.onreadystatechange = function() {
@@ -1411,8 +1462,6 @@
                 return self.uri._open.apply(self, arguments) + "&callback=" + callback;
             };
             self.connect = function(url, fn) {
-                var head = document.head || document.getElementsByTagName("head")[0] || document.documentElement;
-                
                 script = document.createElement("script");
                 script.async = true;
                 script.src = url;

@@ -9,13 +9,7 @@
     <body>
         <script type="text/javascript" src="vibe.js"></script>
         <script type="text/javascript">
-        // To populate sockets
-        vibe.transports._base = vibe.transports.base;
-        vibe.transports.base = function(socket, options) {
-            socket.id = options.id;
-            return vibe.transports._base.apply(this, arguments);
-        };
-        
+        var head = document.head || document.getElementsByTagName("head")[0] || document.documentElement;
         var params = (function(arr) {
             var ret = {};
             for (var i = 0; i < arr.length; i++) {
@@ -25,14 +19,19 @@
             return ret;
         })(location.search.substring(1).split("&"));
         
-        window.begin = function(sid) {
-            window.sessionId = vibe.util.parseJSON(sid);
+        // To populate sockets
+        vibe.transports._base = vibe.transports.base;
+        vibe.transports.base = function(socket, options) {
+            socket.id = options.id;
+            return vibe.transports._base.apply(this, arguments);
+        };
+        
+        window.begin = function(session) {
+            window.session = session;
             (function poll() {
-                var script = document.createElement("script"),
-                    head = document.head || document.getElementsByTagName("head")[0] || document.documentElement;
-                
+                var script = document.createElement("script");
                 script.async = true;
-                script.src = "/poll?sid=" + window.sessionId + "&_=" + Math.random();
+                script.src = "/poll?session=" + window.session + "&_=" + Math.random();
                 script.onload = script.onreadystatechange = function() {
                     if (!script.readyState || /loaded|complete/.test(script.readyState)) {
                         // Needed in Internet Explorer 8 and 9 when testing cross origin connection
@@ -60,19 +59,14 @@
             }
             
             function open() {
-                window.socket = vibe.open((params.origin === "cross" ? options.uri : "/vibe") + "?sid=" + window.sessionId, {
-                    transports: [options.transport], 
-                    heartbeat: +options.heartbeat || false, 
-                    _heartbeat: +options._heartbeat || false, 
+                window.socket = vibe.open((params.origin === "cross" ? options.uri : "/vibe") + "?session=" + window.session, {
                     reconnect: false, 
                     xdrURL: function(url) {
                         return url;
                     }
                 })
                 .on("close", function() {
-                    var script = document.createElement("script"),
-                        head = document.head || document.getElementsByTagName("head")[0] || document.documentElement;
-                    
+                    var script = document.createElement("script");
                     script.async = true;
                     script.src = "/closed?id=" + this.id + "&_=" + Math.random();
                     script.onload = script.onreadystatechange = function() {
@@ -124,13 +118,14 @@
         };
         window.onload = function() {
             var browser = (function() {
-                var ua = navigator.userAgent.toLowerCase(),
-                    browser = {},
-                    match = /(opera)(?:.*version|)[ \/]([\w.]+)/.exec(ua) ||
-                        /(msie) ([\w.]+)/.exec(ua) ||
-                        /(trident)(?:.*? rv:([\w.]+)|)/.exec(ua) || 
-                        ua.indexOf("android") < 0 && /version\/(.+) (safari)/.exec(ua) ||
-                        ua.indexOf("compatible") < 0 && /(mozilla)(?:.*? rv:([\w.]+)|)/.exec(ua) || [];
+                var ua = navigator.userAgent.toLowerCase();
+                var browser = {};
+                var match = 
+                    /(opera)(?:.*version|)[ \/]([\w.]+)/.exec(ua) ||
+                    /(msie) ([\w.]+)/.exec(ua) ||
+                    /(trident)(?:.*? rv:([\w.]+)|)/.exec(ua) || 
+                    ua.indexOf("android") < 0 && /version\/(.+) (safari)/.exec(ua) ||
+                    ua.indexOf("compatible") < 0 && /(mozilla)(?:.*? rv:([\w.]+)|)/.exec(ua) || [];
 
                 if (match[2] === "safari") {
                     match[0] = match[2];
@@ -142,20 +137,16 @@
                 if (/(?:iphone|ipad).*os 6_/.test(ua)) {
                     match = ["", "safari", "6.x"];
                 }
-
                 browser[match[1] || ""] = true;
                 browser.version = match[2] || "0";
-
                 if (browser.trident) {
                     browser.msie = true;
                 }
-                
                 browser.vmajor = +browser.version.split(".")[0];
                 return browser;
             })();
             
             var transports = [];
-            
             if (window.WebSocket &&
                 // Proxy lib doesn't seem to support Safari 5's WebSocket protocol, hixie-76
                 (!browser.safari || browser.vmajor >= 6 || params.origin === "cross") &&
@@ -191,11 +182,9 @@
             }
             transports.push("longpolljsonp");
             
-            var script = document.createElement("script"),
-                head = document.head || document.getElementsByTagName("head")[0] || document.documentElement;
-            
+            var script = document.createElement("script");
             script.async = true;
-            script.src = "/begin?transports=" + encodeURIComponent(transports.join("|"));
+            script.src = "/begin?transports=" + encodeURIComponent(transports.join(","));
             script.onload = script.onreadystatechange = function() {
                 if (!script.readyState || /loaded|complete/.test(script.readyState)) {
                     // Needed in Internet Explorer 8 and 9 when testing cross origin connection

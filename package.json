@@ -33,11 +33,12 @@
     "eventsource": "0.1.2"
   },
   "devDependencies": {
-    "vibe-protocol": "3.0.0-Alpha1",
+    "vibe-protocol": "vibe-project/vibe-protocol#44cc392",
     "grunt": "0.4.5",
     "http-proxy": "1.2.0",
     "mocha": "1.21.4",
     "chai": "1.9.1",
-    "grunt-saucelabs": "8.3.1"
+    "grunt-saucelabs": "8.3.1",
+    "minimist": "1.1.0"
   }
 }

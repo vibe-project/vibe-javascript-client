@@ -87,13 +87,7 @@ module.exports = function(grunt) {
             // Executed by the test runner
             case "/open":
                 res.end();
-                vibe.open(query.uri, {
-                    transports: [query.transport], 
-                    heartbeat: +query.heartbeat || false, 
-                    _heartbeat: +query._heartbeat || false, 
-                    reconnect: false, 
-                    notifyAbort: true
-                })
+                vibe.open(query.uri, {reconnect: false})
                 .on("open", function() {
                     sockets[this.id] = this;
                 })
@@ -142,14 +136,21 @@ module.exports = function(grunt) {
         })
         .listen(9000, function() {
             var server = this;
-            var mocha = new Mocha({grep: /ws|sse|longpollajax/, reporter: "spec"});
+            var mocha = new Mocha();
             delete require.cache[require.resolve("./node_modules/vibe-protocol/test/client.js")];
             mocha.addFile("./node_modules/vibe-protocol/test/client.js");
-
-            // From https://github.com/gregrperkins/grunt-mocha-hack
+            // Set options through process.argv
+            process.argv.push("--vibe.transports", "ws,sse,longpollajax", "--vibe.extension", "reply");
+            mocha.loadFiles();
+            // Undo the changes
+            process.argv.splice(process.argv.indexOf("--vibe.transports"), 4);
+            // Thanks to https://github.com/gregrperkins/grunt-mocha-hack
+            var uncaughtExceptionHandlers = process.listeners("uncaughtException");
+            process.removeAllListeners("uncaughtException");
             var runDomain = domain.create();
             runDomain.run(function() {
                 var runner = mocha.run(function(failures) {
+                    uncaughtExceptionHandlers.forEach(process.on.bind(process, "uncaughtException"));
                     server.close(function() {
                         done(failures === 0);
                     });
@@ -191,8 +192,8 @@ module.exports = function(grunt) {
                 this.instances[session.id] = session;
                 return session;
             },
-            find: function(sid) {
-                return this.instances[sid];
+            find: function(id) {
+                return this.instances[id];
             }
         };
         var closed = {};
@@ -207,15 +208,19 @@ module.exports = function(grunt) {
             case "/begin":
                 var session = sessions.issue();
                 res.setHeader("content-type", "text/javascript; utf-8");
-                res.end("begin(" + JSON.stringify(JSON.stringify(session.id)) + ")");
-
-                process.env.VIBE_TEST_SESSION_ID = session.id;
-                var mocha = new Mocha({grep: new RegExp(query.transports), reporter: "spec"});
+                res.end("begin(" + JSON.stringify(session.id) + ")");
+                
+                var mocha = new Mocha();
                 delete require.cache[require.resolve("./node_modules/vibe-protocol/test/client.js")];
                 mocha.addFile("./node_modules/vibe-protocol/test/client.js");
+                // Set options through process.argv
+                process.argv.push("--vibe.session", session.id, "--vibe.transports", query.transports, "--vibe.extension", "reply");
                 mocha.loadFiles();
-                
-                // From https://github.com/gregrperkins/grunt-mocha-hack
+                // Undo the changes
+                process.argv.splice(process.argv.indexOf("--vibe.session"), 6);
+                // Thanks to https://github.com/gregrperkins/grunt-mocha-hack
+                var uncaughtExceptionHandlers = process.listeners("uncaughtException");
+                process.removeAllListeners("uncaughtException");
                 var runDomain = domain.create();
                 runDomain.run(function() {
                     var runner = mocha.run();
@@ -224,6 +229,7 @@ module.exports = function(grunt) {
                     // https://github.com/axemclion/grunt-saucelabs#test-result-details-with-mocha
                     var failedTests = [];
                     runner.on("end", function() {
+                        uncaughtExceptionHandlers.forEach(process.on.bind(process, "uncaughtException"));
                         var mochaResults = runner.stats;
                         mochaResults.reports = failedTests;
                         session.response(function(res) {
@@ -249,9 +255,9 @@ module.exports = function(grunt) {
                 res.setHeader("pragma", "no-cache");
                 res.setHeader("expires", "0");
                 res.setHeader("content-type", "text/javascript; utf-8");
-                sessions.find(query.sid).setResponse(res);
+                sessions.find(query.session).setResponse(res);
                 break;
-            // to notify some socket is closed
+            // to notify a specific socket is closed
             case "/closed":
                 res.setHeader("content-type", "text/javascript; utf-8");
                 res.end();
@@ -260,7 +266,7 @@ module.exports = function(grunt) {
             // Executed by the test runner
             case "/open":
                 res.end();
-                var session = sessions.find(query.sid);
+                var session = sessions.find(query.session);
                 session.address = query.uri.replace("/vibe", "");
                 session.response(function(res) {
                     // Sauce prefers 127.0.0.1 to localhost for some reason
@@ -292,7 +298,7 @@ module.exports = function(grunt) {
                 break;
             // To test same origin connection
             case "/vibe":
-                proxy.web(req, res, {target: sessions.find(query.sid).address, agent: http.globalAgent}, function() {});
+                proxy.web(req, res, {target: sessions.find(query.session).address, agent: http.globalAgent}, function() {});
                 break;
             default:
                 res.statusCode = 404;
@@ -302,10 +308,11 @@ module.exports = function(grunt) {
         })
         .on("upgrade", function(req, socket, head) {
             var urlObj = url.parse(req.url, true);
+            var query = urlObj.query;
             switch (urlObj.pathname) {
             // To test same origin connection
             case "/vibe":
-                proxy.ws(req, socket, head, {target: sessions.find(urlObj.query.sid).address, agent: http.globalAgent}, function() {});
+                proxy.ws(req, socket, head, {target: sessions.find(query.session).address, agent: http.globalAgent}, function() {});
                 break;
             }
         })
