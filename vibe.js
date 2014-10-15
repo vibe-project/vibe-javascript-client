@@ -1014,6 +1014,24 @@
                     return util.url(options.url, {id: options.id, when: "open", transport: options.transport});
                 }
             };
+            self.close = function() {
+                // Aborts the real connection
+                self.abort();
+                // Sends the abort request to the server
+                // this request is supposed to run in unloading event so script tag should be used
+                var script = document.createElement("script");
+                script.async = false;
+                script.src = util.url(options.url, {id: options.id, when: "abort"});
+                script.onload = script.onreadystatechange = function() {
+                    if (!script.readyState || /loaded|complete/.test(script.readyState)) {
+                        script.onload = script.onreadystatechange = null;
+                        if (script.parentNode) {
+                            script.parentNode.removeChild(script);
+                        }
+                    }
+                };
+                head.insertBefore(script, head.firstChild);
+            };
             return self;
         },
         // WebSocket
@@ -1047,7 +1065,7 @@
             self.send = function(data) {
                 ws.send(data);
             };
-            self.close = function() {
+            self.abort = function() {
                 ws.close();
             };
             return self;
@@ -1096,24 +1114,6 @@
                 });
                 document.body.appendChild(form);
                 form.submit();
-            };
-            self.close = function() {
-                // Aborts the real connection
-                self.abort();
-                // Sends the abort request to the server
-                // this request is supposed to run in unloading event so script tag should be used
-                var script = document.createElement("script");
-                script.async = false;
-                script.src = util.url(options.url, {id: options.id, when: "abort"});
-                script.onload = script.onreadystatechange = function() {
-                    if (!script.readyState || /loaded|complete/.test(script.readyState)) {
-                        script.onload = script.onreadystatechange = null;
-                        if (script.parentNode) {
-                            script.parentNode.removeChild(script);
-                        }
-                    }
-                };
-                head.insertBefore(script, head.firstChild);
             };
             return self;
         },
