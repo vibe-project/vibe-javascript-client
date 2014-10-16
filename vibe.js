@@ -700,11 +700,11 @@
                 options.id = result.id;
                 // An heartbeat option can't be set by user
                 options.heartbeat = result.heartbeat;
-                // TODO
+                // A user's transports is prioritized over that of server
                 if (!options.transports) {
                     options.transports = result.transports;
                 }
-                // TODO for testing
+                // To speed up heartbeat test
                 if (result._heartbeat) {
                     options._heartbeat = result._heartbeat;
                 }
@@ -740,7 +740,6 @@
                     self.fire("close", "notransport");
                 }
             }, function() {
-                // TODO fails....
                 self.fire("close", "error");
             });
             return this;
