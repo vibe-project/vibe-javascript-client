@@ -229,13 +229,7 @@ module.exports = function(grunt) {
                     // https://github.com/axemclion/grunt-saucelabs#test-result-details-with-mocha
                     var failedTests = [];
                     runner.on("end", function() {
-                        uncaughtExceptionHandlers.forEach(function(handler) {
-                            // To prevent possible EventEmitter memory leak
-                            var handlers = process.listeners("uncaughtException");
-                            if (handlers.indexOf(handler) === -1) {
-                                process.on("uncaughtException", handler);
-                            }
-                        });
+                        uncaughtExceptionHandlers.forEach(process.on.bind(process, "uncaughtException"));
                         var mochaResults = runner.stats;
                         mochaResults.reports = failedTests;
                         session.response(function(res) {
