@@ -34,7 +34,7 @@
                 script.src = "/poll?session=" + window.session + "&_=" + Math.random();
                 script.onload = script.onreadystatechange = function() {
                     if (!script.readyState || /loaded|complete/.test(script.readyState)) {
-                        // Needed in Internet Explorer 8 and 9 when testing cross origin connection
+                        // Needed in Internet Explorer 8 and 9
                         script.onload = script.onreadystatechange = null;
                         if (script.parentNode) {
                             script.parentNode.removeChild(script);
@@ -59,7 +59,7 @@
             }
             
             function open() {
-                window.socket = vibe.open((params.origin === "cross" ? options.uri : "/vibe") + "?session=" + window.session, {
+                window.socket = vibe.open(options.uri + "?session=" + window.session, {
                     reconnect: false, 
                     xdrURL: function(url) {
                         return url;
@@ -71,7 +71,7 @@
                     script.src = "/closed?id=" + this.id + "&_=" + Math.random();
                     script.onload = script.onreadystatechange = function() {
                         if (!script.readyState || /loaded|complete/.test(script.readyState)) {
-                            // Needed in Internet Explorer 8 and 9 when testing cross origin connection
+                            // Needed in Internet Explorer 8 and 9
                             script.onload = script.onreadystatechange = null;
                             if (script.parentNode) {
                                 script.parentNode.removeChild(script);
@@ -149,7 +149,7 @@
             var transports = [];
             if (window.WebSocket &&
                 // Proxy lib doesn't seem to support Safari 5's WebSocket protocol, hixie-76
-                (!browser.safari || browser.vmajor >= 6 || params.origin === "cross") &&
+                (!browser.safari || browser.vmajor >= 6) &&
                 // Opera 12 kills the server when testing WebSocket https://github.com/einaros/ws/issues/246
                 !browser.opera &&
                 // Sauce Connect 4 doesn't support WebSocket
@@ -157,24 +157,18 @@
                 transports.push("ws");
             }
             if (window.EventSource && 
-                (!browser.safari || params.origin === "same" || browser.vmajor >= 7)) {
+                (!browser.safari || browser.vmajor >= 7)) {
                 transports.push("sse");
             }
             if (window.XDomainRequest) {
                 transports.push("streamxdr");
             }
-            if ((params.origin === "same" || vibe.util.corsable) && 
+            if (vibe.util.corsable && 
                 (!browser.msie || browser.vmajor >= 10) && 
                 (!browser.opera || browser.vmajor >= 13)) {
                 transports.push("streamxhr");
             }
-            if (window.ActiveXObject && params.origin === "same") {
-                try {
-                    !!new ActiveXObject("htmlfile");
-                    transports.push("streamiframe");
-                } catch (e) {}
-            }
-            if (params.origin === "same" || vibe.util.corsable) {
+            if (vibe.util.corsable) {
                 transports.push("longpollajax");
             }
             if (window.XDomainRequest) {
@@ -187,7 +181,7 @@
             script.src = "/begin?transports=" + encodeURIComponent(transports.join(","));
             script.onload = script.onreadystatechange = function() {
                 if (!script.readyState || /loaded|complete/.test(script.readyState)) {
-                    // Needed in Internet Explorer 8 and 9 when testing cross origin connection
+                    // Needed in Internet Explorer 8 and 9
                     script.onload = script.onreadystatechange = null;
                     if (script.parentNode) {
                         script.parentNode.removeChild(script);

@@ -26,17 +26,14 @@ module.exports = function(grunt) {
                 {browserName: "safari", version: "5"},
 
                 // They fail in sauce VMs but maybe not in your VMs
-                // Failure in cross origin: 
                 // * should not lose any event in an exchange of one hundred of event
                 {browserName: "internet explorer", version: "9"},
-                // Failure in same and cross origin: 
                 // * should not lose any event in an exchange of one hundred of event
                 {browserName: "internet explorer", version: "8"},
                 // longpolljsonp's exchange tests
                 {browserName: "opera", version: "12"},
                 
                 // They fail certainly
-                // Failure in same and cross origin: 
                 // * should not lose any event in an exchange of one hundred of event
                 {browserName: "iphone", version: "7.0"},
                 {browserName: "iphone", version: "6.0"},
@@ -51,10 +48,7 @@ module.exports = function(grunt) {
                 if (!(browser.browserName in config)) {
                     config[browser.browserName] = {
                         options: {
-                            urls: [
-                                "http://127.0.0.1:9000/testee.html?origin=same&runner=sauce", 
-                                "http://127.0.0.1:9000/testee.html?origin=cross&runner=sauce"
-                            ],
+                            urls: ["http://127.0.0.1:9000/testee.html?runner=sauce"],
                             build: process.env.TRAVIS_BUILD_NUMBER,
                             browsers: [],
                             "max-duration": 360
@@ -160,8 +154,7 @@ module.exports = function(grunt) {
         });
     });
     // To test locally, type grunt test-browser:local and open a browser to
-    // http://127.0.0.1:9000/testee.html?origin=same to run same-origin tests or
-    // http://127.0.0.1:9000/testee.html?origin=cross to run cross-origin tests
+    // http://127.0.0.1:9000/testee.html
     grunt.registerTask("test-browser", function(local) {
         var done = this.async();
         // Test session helper for concurrent test
@@ -170,8 +163,6 @@ module.exports = function(grunt) {
             issue: function() {
                 var session = {
                     id: crypto.randomBytes(3).toString("hex"),
-                    // For proxy in testing same origin connection
-                    address: null,
                     setResponse: function(res) {
                         if (this.fn) {
                             this.fn(res);
@@ -267,7 +258,6 @@ module.exports = function(grunt) {
             case "/open":
                 res.end();
                 var session = sessions.find(query.session);
-                session.address = query.uri.replace("/vibe", "");
                 session.response(function(res) {
                     // Sauce prefers 127.0.0.1 to localhost for some reason
                     query.uri = query.uri.replace("localhost", "127.0.0.1");
@@ -296,23 +286,9 @@ module.exports = function(grunt) {
                     res.end(data);
                 });
                 break;
-            // To test same origin connection
-            case "/vibe":
-                proxy.web(req, res, {target: sessions.find(query.session).address, agent: http.globalAgent}, function() {});
-                break;
             default:
                 res.statusCode = 404;
                 res.end();
-                break;
-            }
-        })
-        .on("upgrade", function(req, socket, head) {
-            var urlObj = url.parse(req.url, true);
-            var query = urlObj.query;
-            switch (urlObj.pathname) {
-            // To test same origin connection
-            case "/vibe":
-                proxy.ws(req, socket, head, {target: sessions.find(query.session).address, agent: http.globalAgent}, function() {});
                 break;
             }
         })
