@@ -66,6 +66,9 @@ module.exports = function(grunt) {
     grunt.registerTask("test-node", function() {
         var done = this.async();
         var sockets = {};
+        // Thanks to https://github.com/gregrperkins/grunt-mocha-hack
+        var uncaughtExceptionHandlers = process.listeners("uncaughtException");
+        process.removeAllListeners("uncaughtException");
         
         // To populate sockets
         vibe.transports._base = vibe.transports.base;
@@ -128,6 +131,9 @@ module.exports = function(grunt) {
                 break;
             }
         })
+        .on("close", function() {
+            uncaughtExceptionHandlers.forEach(process.on.bind(process, "uncaughtException"));
+        })
         .listen(9000, function() {
             var server = this;
             var mocha = new Mocha();
@@ -138,13 +144,9 @@ module.exports = function(grunt) {
             mocha.loadFiles();
             // Undo the changes
             process.argv.splice(process.argv.indexOf("--vibe.transports"), 4);
-            // Thanks to https://github.com/gregrperkins/grunt-mocha-hack
-            var uncaughtExceptionHandlers = process.listeners("uncaughtException");
-            process.removeAllListeners("uncaughtException");
             var runDomain = domain.create();
             runDomain.run(function() {
                 var runner = mocha.run(function(failures) {
-                    uncaughtExceptionHandlers.forEach(process.on.bind(process, "uncaughtException"));
                     server.close(function() {
                         done(failures === 0);
                     });
@@ -189,6 +191,9 @@ module.exports = function(grunt) {
         };
         var closed = {};
         var proxy = httpProxy.createProxyServer({});
+        // Thanks to https://github.com/gregrperkins/grunt-mocha-hack
+        var uncaughtExceptionHandlers = process.listeners("uncaughtException");
+        process.removeAllListeners("uncaughtException");
         
         http.createServer(function(req, res) {
             var urlObj = url.parse(req.url, true);
@@ -209,9 +214,6 @@ module.exports = function(grunt) {
                 mocha.loadFiles();
                 // Undo the changes
                 process.argv.splice(process.argv.indexOf("--vibe.session"), 6);
-                // Thanks to https://github.com/gregrperkins/grunt-mocha-hack
-                var uncaughtExceptionHandlers = process.listeners("uncaughtException");
-                process.removeAllListeners("uncaughtException");
                 var runDomain = domain.create();
                 runDomain.run(function() {
                     var runner = mocha.run();
@@ -220,7 +222,6 @@ module.exports = function(grunt) {
                     // https://github.com/axemclion/grunt-saucelabs#test-result-details-with-mocha
                     var failedTests = [];
                     runner.on("end", function() {
-                        uncaughtExceptionHandlers.forEach(process.on.bind(process, "uncaughtException"));
                         var mochaResults = runner.stats;
                         mochaResults.reports = failedTests;
                         session.response(function(res) {
@@ -291,6 +292,9 @@ module.exports = function(grunt) {
                 res.end();
                 break;
             }
+        })
+        .on("close", function() {
+            uncaughtExceptionHandlers.forEach(process.on.bind(process, "uncaughtException"));
         })
         .listen(9000, function() {
             if (local !== "local") {
