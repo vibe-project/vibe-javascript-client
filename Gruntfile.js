@@ -2,7 +2,6 @@ var crypto = require("crypto");
 var domain = require("domain");
 var fs = require("fs");
 var http = require("http");
-var httpProxy = require("http-proxy");
 var Mocha = require("mocha");
 var url = require("url");
 var vibe = require("./vibe");
@@ -190,7 +189,6 @@ module.exports = function(grunt) {
             }
         };
         var closed = {};
-        var proxy = httpProxy.createProxyServer({});
         // Thanks to https://github.com/gregrperkins/grunt-mocha-hack
         var uncaughtExceptionHandlers = process.listeners("uncaughtException");
         process.removeAllListeners("uncaughtException");
