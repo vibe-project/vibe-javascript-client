@@ -397,7 +397,7 @@
             // Sets a timeout timer and clear it on open or close event
             if (options.timeout > 0) {
                 timeoutTimer = setTimeout(function() {
-                    self.fire("close", "timeout");
+                    self.fire("error", new Error("timeout"));
                     transport.close();
                 }, options.timeout);
                 self.once("open", clearTimeoutTimer).once("close", clearTimeoutTimer);
@@ -540,13 +540,13 @@
                     server.set("opened", true);
                     server.broadcast({target: "c", type: "open"});
                 })
-                .once("close", function(reason) {
+                .once("close", function() {
                     // Clears trace timer
                     clearInterval(traceTimer);
                     // Removes the trace
                     document.cookie = encodeURIComponent(name) + "=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/";
                     // The heir is the parent unless unloading
-                    server.broadcast({target: "c", type: "close", data: {reason: reason, heir: !unloading ? options.id : (server.get("children") || [])[0]}});
+                    server.broadcast({target: "c", type: "close", data: {heir: !unloading ? options.id : (server.get("children") || [])[0]}});
                     self.off("_message", propagateMessageEvent);
                 });
             }
@@ -571,7 +571,7 @@
                     // transport will be closed after options._heartbeat ms
                     // unless the server responds it
                     heartbeatTimer = setTimeout(function() {
-                        self.fire("close", "error");
+                        self.fire("error", new Error("heartbeat"));
                         transport.close();
                     }, options._heartbeat);
                 }, options.heartbeat - options._heartbeat);
@@ -737,10 +737,10 @@
                     self.fire("connecting");
                     transport.open();
                 } else {
-                    self.fire("close", "notransport");
+                    self.fire("error", new Error("notransport")).fire("close");
                 }
             }, function() {
-                self.fire("close", "error");
+                self.fire("error", new Error("handshake")).fire("close");
             });
             return this;
         };
@@ -749,9 +749,6 @@
             // Prevents reconnection
             options.reconnect = false;
             clearTimeout(reconnectTimer);
-            // Fires the close event immediately
-            // unloading variable prevents those who use this connection from being aborted
-            self.fire("close", unloading ? "error" : "aborted");
             // Delegates to the transport
             if (transport) {
                 transport.close();
@@ -765,7 +762,7 @@
         // Sends an event to the server via the connection
         self.send = function(type, data, onResolved, onRejected) {
             if (state !== "opened") {
-                throw new Error("A socket is not open yet");
+                self.fire(new Error("notopened"));
             }
             
             // Outbound event
@@ -915,17 +912,13 @@
                     case "close":
                         if (!orphan) {
                             orphan = true;
-                            if (data.reason === "aborted") {
-                                socket.close();
+                            // Gives the heir some time to reconnect
+                            if (data.heir === options.id) {
+                                socket.fire("close");
                             } else {
-                                // Gives the heir some time to reconnect
-                                if (data.heir === options.id) {
-                                    socket.fire("close", data.reason);
-                                } else {
-                                    setTimeout(function() {
-                                        socket.fire("close", data.reason);
-                                    }, 100);
-                                }
+                                setTimeout(function() {
+                                    socket.fire("close");
+                                }, 100);
                             }
                         }
                         break;
@@ -977,7 +970,7 @@
                         trace = findTrace();
                         if (!trace || oldTrace.ts === trace.ts) {
                             // Simulates a close signal
-                            listener(util.stringifyJSON({target: "c", type: "close", data: {reason: "error", heir: oldTrace.heir}}));
+                            listener(util.stringifyJSON({target: "c", type: "close", data: {heir: oldTrace.heir}}));
                         }
                     }, 1000);
                     // Restores options
@@ -1021,12 +1014,14 @@
                 var script = document.createElement("script");
                 script.async = false;
                 script.src = util.url(options.url, {id: options.id, when: "abort"});
-                script.onload = script.onreadystatechange = function() {
+                script.onload = script.onerror = script.onreadystatechange = function() {
                     if (!script.readyState || /loaded|complete/.test(script.readyState)) {
                         script.onload = script.onreadystatechange = null;
                         if (script.parentNode) {
                             script.parentNode.removeChild(script);
                         }
+                        // Fires the close event but it may be already fired by transport
+                        socket.fire("close");
                     }
                 };
                 head.insertBefore(script, head.firstChild);
@@ -1055,10 +1050,10 @@
                     socket.receive(event.data);
                 };
                 ws.onerror = function() {
-                    socket.fire("close", "error");
+                    self.fire("error", new Error()).fire("close");
                 };
-                ws.onclose = function(event) {
-                    socket.fire("close", event.wasClean ? "done" : "error");
+                ws.onclose = function() {
+                    socket.fire("close");
                 };
             };
             self.send = function(data) {
@@ -1137,8 +1132,8 @@
                 };
                 es.onerror = function() {
                     es.close();
-                    // There is no way to find whether this connection closed normally or not
-                    socket.fire("close", "done");
+                    // There is no way to find whether there was an error or not
+                    socket.fire("close");
                 };
             };
             self.abort = function() {
@@ -1196,7 +1191,10 @@
                         }
                         index = length;
                     } else if (xhr.readyState === 4) {
-                        socket.fire("close", xhr.status === 200 ? "done" : "error");
+                        if (xhr.status !== 200) {
+                            socket.fire("error", new Error());
+                        }
+                        socket.fire("close");
                     }
                 };
                 xhr.open("GET", url);
@@ -1237,10 +1235,10 @@
                     index = length;
                 };
                 xdr.onerror = function() {
-                    socket.fire("close", "error");
+                    socket.fire("error", new Error()).fire("close");
                 };
                 xdr.onload = function() {
-                    socket.fire("close", "done");
+                    socket.fire("close");
                 };
                 xdr.open("GET", url);
                 xdr.send();
@@ -1320,7 +1318,7 @@
                     container = cdoc.body.lastChild;
                     // Detects connection failure
                     if (!container) {
-                        socket.fire("close", "error");
+                        socket.fire("error", new Error()).fire("close");
                         return false;
                     }
                     socket.fire("open");
@@ -1334,7 +1332,7 @@
                             self.parse(text);
                         }
                         if (cdoc.readyState === "complete") {
-                            socket.fire("close", "done");
+                            socket.fire("close");
                             return false;
                         }
                     });
@@ -1371,7 +1369,7 @@
                                     socket.receive(util.stringifyJSON(array[i]));
                                 }
                             } else {
-                                socket.fire("close", "done");
+                                socket.fire("close");
                             }
                         });
                     }
@@ -1399,7 +1397,7 @@
                         if (xhr.status === 200) {
                             fn(xhr.responseText);
                         } else {
-                            socket.fire("close", "error");
+                            socket.fire("error", new Error());
                         }
                     }
                 };
@@ -1431,7 +1429,7 @@
                     fn(xdr.responseText);
                 };
                 xdr.onerror = function() {
-                    socket.fire("close", "error");
+                    socket.fire("error", new Error()).fire("close");
                 };
                 xdr.open("GET", url);
                 xdr.send();
@@ -1481,7 +1479,7 @@
                 };
                 script.onerror = function() {
                     script.clean();
-                    socket.fire("close", "error");
+                    socket.fire("error", new Error()).fire("close");
                 };
                 head.insertBefore(script, head.firstChild);                        
             };
@@ -1541,7 +1539,7 @@
             socket = sockets[i];
             // Fires a close event immediately
             if (socket.state() === "opened") {
-                socket.fire("close", "error");
+                socket.fire("error", new Error("offline")).fire("close");
             }
         }
     });
