@@ -1068,10 +1068,22 @@
         httpbase: function(socket, options) {
             var self = transports.base(socket, options);
             
+            // Try again as long as the socket is opened
+            function retry(data) {
+                if (socket.state() === "opened") {
+                    self.send(data);
+                }
+            }
+            
             self.send = !options.crossOrigin || util.corsable ?
             // By XMLHttpRequest
             function(data) {
                 var xhr = util.xhr();
+                xhr.onreadystatechange = function() {
+                    if (xhr.readyState === 4 && xhr.status !== 200) {
+                        retry(data);
+                    }
+                };
                 xhr.open("POST", util.url(options.url, {id: options.id}));
                 xhr.setRequestHeader("content-type", "text/plain; charset=UTF-8");
                 if (util.corsable) {
@@ -1084,6 +1096,9 @@
                 // Only text/plain is supported for the request's Content-Type header
                 // from the fourth at http://blogs.msdn.com/b/ieinternals/archive/2010/05/13/xdomainrequest-restrictions-limitations-and-workarounds.aspx
                 var xdr = new window.XDomainRequest();
+                xdr.onerror = function() {
+                    retry(data);
+                };
                 xdr.open("POST", options.xdrURL.call(socket, util.url(options.url, {id: options.id})));
                 xdr.send("data=" + data);
             } :
@@ -1103,6 +1118,9 @@
                 textarea = form.firstChild;
                 textarea.value = data;
                 iframe = form.lastChild;
+                util.on(iframe, "error", function() {
+                    retry(data);
+                });
                 util.on(iframe, "load", function() {
                     document.body.removeChild(form);
                 });
