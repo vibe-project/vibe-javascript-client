@@ -88,7 +88,7 @@ module.exports = function(grunt) {
                     sockets.push(this.id);
                 })
                 .on("close", function() {
-                    sockets.splice(sockets.indexOf(socket.id), 1);
+                    sockets.splice(sockets.indexOf(this.id), 1);
                 })
                 .on("abort", function() {
                     this.close();
