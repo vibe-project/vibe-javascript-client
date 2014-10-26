@@ -16,26 +16,24 @@ module.exports = function(grunt) {
                 // They fail rarely
                 {browserName: "internet explorer", version: "11"},
                 {browserName: "internet explorer", version: "10"},
+                {browserName: "internet explorer", version: "9"},
+                {browserName: "internet explorer", version: "8"},
+                {browserName: "chrome", version: "38"},
                 {browserName: "chrome", version: "37"},
-                {browserName: "chrome", version: "36"},
-                {browserName: "firefox", version: "31"},
-                {browserName: "firefox", version: "30"},
+                {browserName: "firefox", version: "33"},
+                {browserName: "firefox", version: "32"},
                 {browserName: "safari", version: "7"},
                 {browserName: "safari", version: "6"},
                 {browserName: "safari", version: "5"},
 
-                // They fail in sauce VMs but maybe not in your VMs
-                // * should not lose any event in an exchange of one hundred of event
-                {browserName: "internet explorer", version: "9"},
-                // * should not lose any event in an exchange of one hundred of event
-                {browserName: "internet explorer", version: "8"},
                 // longpolljsonp's exchange tests
                 {browserName: "opera", version: "12"},
                 
                 // They fail certainly
                 // * should not lose any event in an exchange of one hundred of event
-                {browserName: "iphone", version: "7.0"},
-                {browserName: "iphone", version: "6.0"},
+                {browserName: "iphone", version: "8.0"},
+                {browserName: "iphone", version: "7.1"},
+                {browserName: "iphone", version: "6.1"},
                 
                 // * Internet Explorer 6 and 7 can't be tested because we don't use
                 // sauce tunnel to run test correctly and can't use localhost and 127.0.0.1 
