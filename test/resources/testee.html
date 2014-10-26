@@ -26,12 +26,12 @@
             return vibe.transports._base.apply(this, arguments);
         };
         
-        window.begin = function(session) {
-            window.session = session;
+        window.begin = function(text) {
+            var session = vibe.util.parseJSON(text);
             (function poll() {
                 var script = document.createElement("script");
                 script.async = true;
-                script.src = "/poll?session=" + window.session + "&_=" + Math.random();
+                script.src = "/poll?session=" + session + "&_=" + Math.random();
                 script.onload = script.onreadystatechange = function() {
                     if (!script.readyState || /loaded|complete/.test(script.readyState)) {
                         // Needed in Internet Explorer 8 and 9
@@ -59,7 +59,7 @@
             }
             
             function open() {
-                window.socket = vibe.open(options.uri + "?session=" + window.session, {
+                window.socket = vibe.open(options.uri, {
                     reconnect: false, 
                     xdrURL: function(url) {
                         return url;

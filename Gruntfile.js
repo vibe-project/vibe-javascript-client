@@ -64,7 +64,7 @@ module.exports = function(grunt) {
     
     grunt.registerTask("test-node", function() {
         var done = this.async();
-        var sockets = {};
+        var sockets = [];
         // Thanks to https://github.com/gregrperkins/grunt-mocha-hack
         var uncaughtExceptionHandlers = process.listeners("uncaughtException");
         process.removeAllListeners("uncaughtException");
@@ -85,10 +85,10 @@ module.exports = function(grunt) {
                 res.end();
                 vibe.open(query.uri, {reconnect: false})
                 .on("open", function() {
-                    sockets[this.id] = this;
+                    sockets.push(this.id);
                 })
                 .on("close", function() {
-                    delete sockets[this.id];
+                    sockets.splice(sockets.indexOf(socket.id), 1);
                 })
                 .on("abort", function() {
                     this.close();
@@ -122,7 +122,7 @@ module.exports = function(grunt) {
                 });
                 break;
             case "/alive":
-                res.end("" + (query.id in sockets));
+                res.end("" + (sockets.indexOf(query.id) !== -1));
                 break;
             default:
                 res.statusCode = 404;
@@ -161,18 +161,23 @@ module.exports = function(grunt) {
         // Test session helper for concurrent test
         var sessions = {
             instances: {},
-            issue: function() {
+            issue: function(query) {
+                var first = true;
                 var session = {
                     id: crypto.randomBytes(3).toString("hex"),
-                    setResponse: function(res) {
+                    set: function(res) {
                         if (this.fn) {
                             this.fn(res);
                             delete this.fn;
                         } else {
                             this.res = res;
+                            if (first) {
+                                first = false;
+                                runTest(this, query);
+                            }
                         }
                     },
-                    response: function(fn) {
+                    get: function(fn) {
                         if (this.res) {
                             fn(this.res);
                             delete this.res;
@@ -188,11 +193,47 @@ module.exports = function(grunt) {
                 return this.instances[id];
             }
         };
-        var closed = {};
+        var runTest = function(session, query) {
+            var mocha = new Mocha();
+            delete require.cache[require.resolve("./node_modules/vibe-protocol/test/client.js")];
+            mocha.addFile("./node_modules/vibe-protocol/test/client.js");
+            // Set options through process.argv
+            process.argv.push("--vibe.session", session.id, "--vibe.transports", query.transports, "--vibe.extension", "reply");
+            mocha.loadFiles();
+            // Undo the changes
+            process.argv.splice(process.argv.indexOf("--vibe.session"), 6);
+            var runDomain = domain.create();
+            runDomain.run(function() {
+                var runner = mocha.run();
+                runDomain.on("error", runner.uncaught.bind(runner));
+                // For integration with Sauce
+                // https://github.com/axemclion/grunt-saucelabs#test-result-details-with-mocha
+                var failedTests = [];
+                runner.on("end", function() {
+                    var mochaResults = runner.stats;
+                    mochaResults.reports = failedTests;
+                    session.get(function(res) {
+                        res.end("end(" + JSON.stringify(JSON.stringify(mochaResults)) + ")");
+                    });
+                });
+                runner.on("fail", function(test, err) {
+                    function flattenTitles(test) {
+                        var titles = [];
+                        while (test.parent.title) {
+                            titles.push(test.parent.title);
+                            test = test.parent;
+                        }
+                        return titles.reverse();
+                    }
+                    failedTests.push({name: test.title, result: false, message: err.message, stack: err.stack, titles: flattenTitles(test)});
+                });
+            });
+        };
+        var closed = [];
         // Thanks to https://github.com/gregrperkins/grunt-mocha-hack
         var uncaughtExceptionHandlers = process.listeners("uncaughtException");
         process.removeAllListeners("uncaughtException");
-        
+        // Broker for testee.html and test suite
         http.createServer(function(req, res) {
             var urlObj = url.parse(req.url, true);
             var query = urlObj.query;
@@ -200,44 +241,9 @@ module.exports = function(grunt) {
             // Executed by testee.html
             // to start test
             case "/begin":
-                var session = sessions.issue();
+                var session = sessions.issue(query);
                 res.setHeader("content-type", "text/javascript; utf-8");
-                res.end("begin(" + JSON.stringify(session.id) + ")");
-                
-                var mocha = new Mocha();
-                delete require.cache[require.resolve("./node_modules/vibe-protocol/test/client.js")];
-                mocha.addFile("./node_modules/vibe-protocol/test/client.js");
-                // Set options through process.argv
-                process.argv.push("--vibe.session", session.id, "--vibe.transports", query.transports, "--vibe.extension", "reply");
-                mocha.loadFiles();
-                // Undo the changes
-                process.argv.splice(process.argv.indexOf("--vibe.session"), 6);
-                var runDomain = domain.create();
-                runDomain.run(function() {
-                    var runner = mocha.run();
-                    runDomain.on("error", runner.uncaught.bind(runner));
-                    // For integration with Sauce
-                    // https://github.com/axemclion/grunt-saucelabs#test-result-details-with-mocha
-                    var failedTests = [];
-                    runner.on("end", function() {
-                        var mochaResults = runner.stats;
-                        mochaResults.reports = failedTests;
-                        session.response(function(res) {
-                            res.end("end(" + JSON.stringify(JSON.stringify(mochaResults)) + ")");
-                        });
-                    });
-                    runner.on("fail", function(test, err) {
-                        function flattenTitles(test) {
-                            var titles = [];
-                            while (test.parent.title) {
-                                titles.push(test.parent.title);
-                                test = test.parent;
-                            }
-                            return titles.reverse();
-                        };
-                        failedTests.push({name: test.title, result: false, message: err.message, stack: err.stack, titles: flattenTitles(test)});
-                    });
-                });
+                res.end("begin(" + JSON.stringify(JSON.stringify(session.id)) + ")");
                 break;
             // to make a persistent connection waiting a message from /open
             case "/poll":
@@ -245,26 +251,26 @@ module.exports = function(grunt) {
                 res.setHeader("pragma", "no-cache");
                 res.setHeader("expires", "0");
                 res.setHeader("content-type", "text/javascript; utf-8");
-                sessions.find(query.session).setResponse(res);
+                sessions.find(query.session).set(res);
                 break;
             // to notify a specific socket is closed
             case "/closed":
                 res.setHeader("content-type", "text/javascript; utf-8");
                 res.end();
-                closed[query.id] = true;
+                closed.push(query.id);
                 break;
             // Executed by the test runner
             case "/open":
                 res.end();
                 var session = sessions.find(query.session);
-                session.response(function(res) {
+                session.get(function(res) {
                     // Sauce prefers 127.0.0.1 to localhost for some reason
-                    query.uri = query.uri.replace("localhost", "127.0.0.1");
+                    query.uri = query.uri.replace("localhost", "127.0.0.1") + "?session=" + session.id;
                     res.end("connect(" + JSON.stringify(JSON.stringify(query)) + ")");
                 });
                 break;
             case "/alive":
-                res.end("" + !(query.id in closed));
+                res.end("" + (closed.indexOf(query.id) === -1));
                 break;
             // Static assets
             case "/vibe.js":
