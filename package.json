@@ -35,8 +35,8 @@
   "devDependencies": {
     "vibe-protocol": "vibe-project/vibe-protocol#84261f0",
     "grunt": "0.4.5",
-    "mocha": "1.21.4",
-    "chai": "1.9.1",
+    "mocha": "2.0.1",
+    "chai": "1.9.2",
     "grunt-saucelabs": "8.3.2",
     "minimist": "1.1.0"
   }
