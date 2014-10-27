@@ -1557,7 +1557,7 @@
             socket = sockets[i];
             // Fires a close event immediately
             if (socket.state() === "opened") {
-                socket.fire("error", new Error("offline")).fire("close");
+                socket.fire("error", new Error()).fire("close");
             }
         }
     });
