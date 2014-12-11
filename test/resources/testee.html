@@ -63,22 +63,8 @@
                     reconnect: false, 
                     xdrURL: function(url) {
                         return url;
-                    }
-                })
-                .on("close", function() {
-                    var script = document.createElement("script");
-                    script.async = true;
-                    script.src = "/closed?id=" + this.id + "&_=" + Math.random();
-                    script.onload = script.onreadystatechange = function() {
-                        if (!script.readyState || /loaded|complete/.test(script.readyState)) {
-                            // Needed in Internet Explorer 8 and 9
-                            script.onload = script.onreadystatechange = null;
-                            if (script.parentNode) {
-                                script.parentNode.removeChild(script);
-                            }
-                        }
-                    };
-                    head.insertBefore(script, head.firstChild);
+                    },
+                    transports: [options.transport]
                 })
                 .on("abort", function() {
                     this.close();
@@ -158,23 +144,15 @@
             }
             if (window.EventSource && 
                 (!browser.safari || browser.vmajor >= 7)) {
-                transports.push("sse");
-            }
-            if (window.XDomainRequest) {
-                transports.push("streamxdr");
-            }
-            if (vibe.util.corsable && 
+                transports.push("stream"); // sse
+            } else if (window.XDomainRequest) {
+                transports.push("stream"); // streamxdr
+            } else if (vibe.util.corsable && 
                 (!browser.msie || browser.vmajor >= 10) && 
                 (!browser.opera || browser.vmajor >= 13)) {
-                transports.push("streamxhr");
+                transports.push("stream"); // streamxhr
             }
-            if (vibe.util.corsable) {
-                transports.push("longpollajax");
-            }
-            if (window.XDomainRequest) {
-                transports.push("longpollxdr");
-            }
-            transports.push("longpolljsonp");
+            transports.push("longpoll");
             
             var script = document.createElement("script");
             script.async = true;

@@ -62,17 +62,9 @@ module.exports = function(grunt) {
     
     grunt.registerTask("test-node", function() {
         var done = this.async();
-        var sockets = [];
         // Thanks to https://github.com/gregrperkins/grunt-mocha-hack
         var uncaughtExceptionHandlers = process.listeners("uncaughtException");
         process.removeAllListeners("uncaughtException");
-        
-        // To populate sockets
-        vibe.transports._base = vibe.transports.base;
-        vibe.transports.base = function(socket, options) {
-            socket.id = options.id;
-            return vibe.transports._base.apply(this, arguments);
-        };
         
         http.createServer(function(req, res) {
             var urlObj = url.parse(req.url, true);
@@ -81,13 +73,7 @@ module.exports = function(grunt) {
             // Executed by the test runner
             case "/open":
                 res.end();
-                vibe.open(query.uri, {reconnect: false})
-                .on("open", function() {
-                    sockets.push(this.id);
-                })
-                .on("close", function() {
-                    sockets.splice(sockets.indexOf(this.id), 1);
-                })
+                vibe.open(query.uri, {reconnect: false, transports: [query.transport]})
                 .on("abort", function() {
                     this.close();
                 })
@@ -119,9 +105,6 @@ module.exports = function(grunt) {
                     }
                 });
                 break;
-            case "/alive":
-                res.end("" + (sockets.indexOf(query.id) !== -1));
-                break;
             default:
                 res.statusCode = 404;
                 res.end();
@@ -137,7 +120,7 @@ module.exports = function(grunt) {
             delete require.cache[require.resolve("./node_modules/vibe-protocol/test/client.js")];
             mocha.addFile("./node_modules/vibe-protocol/test/client.js");
             // Set options through process.argv
-            process.argv.push("--vibe.transports", "ws,sse,longpollajax", "--vibe.extension", "reply");
+            process.argv.push("--vibe.transports", "ws,stream,longpoll", "--vibe.extension", "reply");
             mocha.loadFiles();
             // Undo the changes
             process.argv.splice(process.argv.indexOf("--vibe.transports"), 4);
@@ -227,7 +210,6 @@ module.exports = function(grunt) {
                 });
             });
         };
-        var closed = [];
         // Thanks to https://github.com/gregrperkins/grunt-mocha-hack
         var uncaughtExceptionHandlers = process.listeners("uncaughtException");
         process.removeAllListeners("uncaughtException");
@@ -251,12 +233,6 @@ module.exports = function(grunt) {
                 res.setHeader("content-type", "text/javascript; utf-8");
                 sessions.find(query.session).set(res);
                 break;
-            // to notify a specific socket is closed
-            case "/closed":
-                res.setHeader("content-type", "text/javascript; utf-8");
-                res.end();
-                closed.push(query.id);
-                break;
             // Executed by the test runner
             case "/open":
                 res.end();
@@ -266,9 +242,6 @@ module.exports = function(grunt) {
                     query.uri = query.uri.replace("localhost", "127.0.0.1") + "?session=" + session.id;
                     res.end("connect(" + JSON.stringify(JSON.stringify(query)) + ")");
                 });
-                break;
-            case "/alive":
-                res.end("" + (closed.indexOf(query.id) === -1));
                 break;
             // Static assets
             case "/vibe.js":
