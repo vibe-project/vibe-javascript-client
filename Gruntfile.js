@@ -48,6 +48,9 @@ module.exports = function(grunt) {
                             urls: ["http://127.0.0.1:9000/testee.html?runner=sauce"],
                             build: process.env.TRAVIS_BUILD_NUMBER,
                             browsers: [],
+                            // Running Mocha instances concurrently is not recommended
+                            // https://groups.google.com/d/msg/mochajs/NBmSY70mPZw/m3QCxI19sTkJ
+                            throttled: 1,
                             "max-duration": 360
                         }
                     };
