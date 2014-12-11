@@ -70,11 +70,7 @@
                     this.close();
                 })
                 .on("echo", function(data) {
-                    var self = this;
-                    // To mitigate stress
-                    setTimeout(function() {
-                        self.send("echo", data);
-                    }, 10);
+                    this.send("echo", data);
                 })
                 .on("/reply/inbound", function(data, reply) {
                     switch (data.type) {
