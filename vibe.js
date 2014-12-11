@@ -1334,9 +1334,6 @@
     // Long polling Base
     transports.longpollbase = function(socket, options) {
         var self = transports.httpbase(socket, options);
-        self.uri.poll = function(msgId) {
-            return util.stringifyURL(options.url, {id: self.id, when: "poll", lastMsgId: msgId});
-        };
         self.open = function() {
             self.connect(self.uri.open(), function(data) {
                 function onresponse(data) {
@@ -1355,7 +1352,7 @@
                 }
                 onresponse(data);
                 function poll(msgId) {
-                    self.connect(self.uri.poll(msgId), onresponse);
+                    self.connect(util.stringifyURL(options.url, {id: self.id, when: "poll", lastMsgId: msgId}), onresponse);
                 }
             });
         };
@@ -1435,9 +1432,9 @@
             window[callback] = function() {};
             jsonpCallbacks.push(callback);
         });
-        self.uri._open = self.uri.open;
+        var uriOpen = self.uri.open;
         self.uri.open = function() {
-            return self.uri._open.apply(self, arguments) + "&jsonp=true&callback=" + callback;
+            return uriOpen.apply(self, arguments) + "&jsonp=true&callback=" + callback;
         };
         self.connect = function(url, fn) {
             script = document.createElement("script");
