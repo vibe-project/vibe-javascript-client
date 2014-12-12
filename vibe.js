@@ -17,7 +17,7 @@
         });
     } else if (typeof exports === "object") {
         // Node
-        // prepare the window object
+        // Prepare the window object
         var window = require("jsdom").jsdom().parentWindow;
         window.WebSocket = require("ws");
         window.EventSource = require("eventsource");
@@ -29,14 +29,11 @@
         root.vibe = factory(root);
     }
 }(this, function(window) {
-    
     // Enables ECMAScript 5's strict mode
     "use strict";
     
     // A global identifier
     var guid = 1;
-    // Is the unload event being processed?
-    var unloading;
     // Prototype shortcuts
     var slice = Array.prototype.slice;
     var toString = Object.prototype.toString;
@@ -45,23 +42,11 @@
     var document = window.document;
     var location = window.location;
     var navigator = window.navigator;
-    // Utility functions
-    var util;
-    // Callback names for JSONP
-    var jsonpCallbacks = [];
+    // Shortcut to find head tag
     var head = document.head || document.getElementsByTagName("head")[0] || document.documentElement;
     
     // Most are inspired by jQuery
-    util = {
-        now: Date.now || function() {
-            return +(new Date());
-        },
-        isArray: Array.isArray || function(array) {
-            return toString.call(array) === "[object Array]";
-        },
-        isFunction: function(fn) {
-            return toString.call(fn) === "[object Function]";
-        },
+    var util = {
         makeAbsolute: function(url) {
             var div = document.createElement("div");
             // Uses an innerHTML property to obtain an absolute URL
@@ -664,7 +649,6 @@
         var receive = socket.receive;
         socket.receive = function(data) {
             var query = util.parseURL(data).query;
-            // TODO NOT socket.id nor options.id
             // Assign a newly issued identifier for this socket
             self.id = query.id;
             // Executes the original method
@@ -792,7 +776,7 @@
         // The detail about parsing is explained in the reference implementation
         self.parse = function(chunk) {
             // Strips off the left padding of the chunk that appears in the
-            // first chunk and every chunk for Android browser 2 and 3
+            // first chunk
             chunk = chunk.replace(/^\s+/, "");
             // The chunk should be not empty for correct parsing, 
             if (chunk) {
@@ -1076,6 +1060,7 @@
         return self;
     };
     // Long polling - JSONP
+    var jsonpCallbacks = [];
     transports.longpolljsonp = function(socket, options) {
         var script;
         var callback = jsonpCallbacks.pop() || ("socket_" + (guid++));
@@ -1145,7 +1130,6 @@
     
     // For browser environment
     util.on(window, "unload", function() {
-        unloading = true;
         var i;
         var socket;
         for (i = 0; i < sockets.length; i++) {
