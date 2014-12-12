@@ -21,16 +21,13 @@ module.exports = function(grunt) {
                 {browserName: "chrome", version: "38"},
                 {browserName: "firefox", version: "34"},
                 {browserName: "firefox", version: "33"},
-                {browserName: "safari", version: "8"},
                 {browserName: "safari", version: "7"},
                 {browserName: "safari", version: "6"},
                 {browserName: "safari", version: "5"},
                 {browserName: "opera", version: "12"},
-                {browserName: "iphone", version: "8.1"},
-                {browserName: "iphone", version: "7.1"},
-                {browserName: "iphone", version: "6.1"},
                 // * Opera 13+ are not supported due to market share Sauce says
-                // * Android 4 emulators of sauce don't work properly
+                // * Android 4 emulators of Sauce don't work properly
+                // * Safari 8 and iOS 6-8 don't work properly but not sure
             ].forEach(function(browser) {
                 // Group tests by browser to avoid the sauce issue skipping some tests
                 if (!(browser.browserName in config)) {
