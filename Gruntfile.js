@@ -116,7 +116,7 @@ module.exports = function(grunt) {
         })
         .listen(9000, function() {
             var server = this;
-            var mocha = new Mocha().reporter("list");
+            var mocha = new Mocha().reporter("tap");
             delete require.cache[require.resolve("./node_modules/vibe-protocol/test/client.js")];
             mocha.addFile("./node_modules/vibe-protocol/test/client.js");
             // Set options through process.argv
@@ -175,7 +175,7 @@ module.exports = function(grunt) {
             }
         };
         var runTest = function(session, query) {
-            var mocha = new Mocha().reporter("list");
+            var mocha = new Mocha().reporter("tap");
             delete require.cache[require.resolve("./node_modules/vibe-protocol/test/client.js")];
             mocha.addFile("./node_modules/vibe-protocol/test/client.js");
             // Set options through process.argv
