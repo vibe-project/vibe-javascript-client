@@ -68,7 +68,7 @@
                 elem.detachEvent("on" + type, fn);
             }
         },
-        stringifyURL: function(url, params) {
+        stringifyURI: function(url, params) {
             var name;
             var s = [];
             params = params || {};
@@ -82,21 +82,15 @@
             }
             return url + (/\?/.test(url) ? "&" : "?") + s.join("&").replace(/%20/g, "+");
         },
-        parseURL: function(url) {
+        parseURI: function(url) {
             // Deal with only query part
             var obj = {query: {}};
             var match = /.*\?([^#]*)/.exec(url);
             if (match) {
                 var array = match[1].split("&");
                 for (var i = 0; i < array.length; i++) {
-                    var entry = /([^=]*)\=(.*)/.exec(array[i]);
-                    if (entry) {
-                        // a=b
-                        obj.query[entry[1]] = entry[2];
-                    } else {
-                        // a
-                        obj.query[array[i]] = "";
-                    }
+                    var part = array[i].split("=");
+                    obj.query[decodeURIComponent(part[0])] = decodeURIComponent(part[1] || "");
                 }
             }
             return obj;
@@ -553,7 +547,7 @@
         self.receive = function(data) {
             // The first message is handshake result 
             if (state === "connecting") {
-                var query = util.parseURL(data).query;
+                var query = util.parseURI(data).query;
                 // An heartbeat option can't be set by user
                 options.heartbeat = +query.heartbeat;
                 // To speed up heartbeat test
@@ -625,16 +619,16 @@
         var self = {};
         self.uri = {
             open: function() {
-                return util.stringifyURL(options.url, {id: self.id, when: "open", transport: options.transport});
+                return util.stringifyURI(options.url, {id: self.id, when: "open", transport: options.transport});
             },
             send: function() {
-                return util.stringifyURL(options.url, {id: self.id});
+                return util.stringifyURI(options.url, {id: self.id});
             }
         };
         // A ugly hack to intercept the first message for HTTP transports
         var receive = socket.receive;
         socket.receive = function(data) {
-            var query = util.parseURL(data).query;
+            var query = util.parseURI(data).query;
             // Assign a newly issued identifier for this socket
             self.id = query.id;
             // Executes the original method
@@ -712,7 +706,7 @@
                 // this request is supposed to run in unloading event so script tag should be used
                 var script = document.createElement("script");
                 script.async = false;
-                script.src = util.stringifyURL(options.url, {id: self.id, when: "abort"});
+                script.src = util.stringifyURI(options.url, {id: self.id, when: "abort"});
                 script.onload = script.onerror = script.onreadystatechange = function() {
                     if (!script.readyState || /loaded|complete/.test(script.readyState)) {
                         script.onload = script.onreadystatechange = null;
@@ -936,7 +930,7 @@
                 // To set the transport id before polling
                 socket.receive(match[2]);
                 (function poll(msgId) {
-                    self.connect(util.stringifyURL(options.url, {id: self.id, when: "poll", lastMsgId: msgId}), function(data) {
+                    self.connect(util.stringifyURI(options.url, {id: self.id, when: "poll", lastMsgId: msgId}), function(data) {
                         if (data) {
                             var match = rdata.exec(data);
                             poll(match[1]);
