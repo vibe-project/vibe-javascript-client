@@ -222,9 +222,8 @@
 
         // Swaps variables
         if (match[2] === "safari") {
-            match[0] = match[2];
             match[2] = match[1];
-            match[1] = match[0];
+            match[1] = "safari";
         }
         browser[match[1] || ""] = true;
         browser.version = match[2] || "0";

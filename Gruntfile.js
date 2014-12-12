@@ -48,7 +48,7 @@ module.exports = function(grunt) {
                             urls: ["http://127.0.0.1:9000/testee.html?runner=sauce"],
                             build: process.env.TRAVIS_BUILD_NUMBER,
                             browsers: [],
-                            "max-duration": 360
+                            "max-duration": 720
                         }
                     };
                 }
