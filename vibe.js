@@ -219,7 +219,13 @@
             /(opera)(?:.*version|)[ \/]([\w.]+)/.exec(ua) || 
             // Safari
             ua.indexOf("android") < 0 && /version\/(.+) (safari)/.exec(ua) || [];
-        
+
+        // Swaps variables
+        if (match[2] === "safari") {
+            match[0] = match[2];
+            match[2] = match[1];
+            match[1] = match[0];
+        }
         browser[match[1] || ""] = true;
         browser.version = match[2] || "0";
         browser.vmajor = browser.version.split(".")[0];
