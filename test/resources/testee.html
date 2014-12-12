@@ -19,13 +19,6 @@
             return ret;
         })(location.search.substring(1).split("&"));
         
-        // To populate sockets
-        vibe.transports._base = vibe.transports.base;
-        vibe.transports.base = function(socket, options) {
-            socket.id = options.id;
-            return vibe.transports._base.apply(this, arguments);
-        };
-        
         window.begin = function(text) {
             var session = vibe.util.parseJSON(text);
             (function poll() {
@@ -110,11 +103,9 @@
                     ua.indexOf("compatible") < 0 && /(mozilla)(?:.*? rv:([\w.]+)|)/.exec(ua) || [];
 
                 if (match[2] === "safari") {
-                    match[0] = match[2];
                     match[2] = match[1];
-                    match[1] = match[0];
+                    match[1] = "safari";
                 }
-                
                 // There is no Version/6.0 and Safari/8536.25 part in user agent string of iOS 6 emulator
                 if (/(?:iphone|ipad).*os 6_/.test(ua)) {
                     match = ["", "safari", "6.x"];
@@ -127,29 +118,27 @@
                 browser.vmajor = +browser.version.split(".")[0];
                 return browser;
             })();
-            
             var transports = [];
             if (window.WebSocket &&
-                // Proxy lib doesn't seem to support Safari 5's WebSocket protocol, hixie-76
-                (!browser.safari || browser.vmajor >= 6) &&
                 // Opera 12 kills the server when testing WebSocket https://github.com/einaros/ws/issues/246
                 !browser.opera &&
                 // Sauce Connect 4 doesn't support WebSocket
                 params.runner !== "sauce") {
                 transports.push("ws");
             }
-            if (window.EventSource && 
+            if (window.EventSource &&
+                // Safari 5-6 don't allow cross-origin sse
                 (!browser.safari || browser.vmajor >= 7)) {
                 transports.push("stream"); // sse
             } else if (window.XDomainRequest) {
                 transports.push("stream"); // streamxdr
             } else if (vibe.util.corsable && 
+                // IE 6-9 and Opera 12 can't detect changes in response body
                 (!browser.msie || browser.vmajor >= 10) && 
                 (!browser.opera || browser.vmajor >= 13)) {
                 transports.push("stream"); // streamxhr
             }
             transports.push("longpoll");
-            
             var script = document.createElement("script");
             script.async = true;
             script.src = "/begin?transports=" + encodeURIComponent(transports.join(","));

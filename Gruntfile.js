@@ -48,15 +48,12 @@ module.exports = function(grunt) {
             return config;
         })()
     });
-    
     grunt.loadNpmTasks("grunt-saucelabs");
-    
     grunt.registerTask("test-node", function() {
         var done = this.async();
         // Thanks to https://github.com/gregrperkins/grunt-mocha-hack
         var uncaughtExceptionHandlers = process.listeners("uncaughtException");
         process.removeAllListeners("uncaughtException");
-        
         http.createServer(function(req, res) {
             var urlObj = url.parse(req.url, true);
             var query = urlObj.query;
