@@ -13,31 +13,22 @@ module.exports = function(grunt) {
         "saucelabs-mocha": (function() {
             var config = {};
             [
-                // They fail rarely
                 {browserName: "internet explorer", version: "11"},
                 {browserName: "internet explorer", version: "10"},
                 {browserName: "internet explorer", version: "9"},
                 {browserName: "internet explorer", version: "8"},
+                {browserName: "chrome", version: "39"},
                 {browserName: "chrome", version: "38"},
-                {browserName: "chrome", version: "37"},
+                {browserName: "firefox", version: "34"},
                 {browserName: "firefox", version: "33"},
-                {browserName: "firefox", version: "32"},
+                {browserName: "safari", version: "8"},
                 {browserName: "safari", version: "7"},
                 {browserName: "safari", version: "6"},
                 {browserName: "safari", version: "5"},
-
-                // longpolljsonp's exchange tests
                 {browserName: "opera", version: "12"},
-                
-                // They fail certainly
-                // * should not lose any event in an exchange of one hundred of event
-                {browserName: "iphone", version: "8.0"},
+                {browserName: "iphone", version: "8.1"},
                 {browserName: "iphone", version: "7.1"},
                 {browserName: "iphone", version: "6.1"},
-                
-                // * Internet Explorer 6 and 7 can't be tested because we don't use
-                // sauce tunnel to run test correctly and can't use localhost and 127.0.0.1 
-                // so that it's not possible to avoid the persistent connection limit per host
                 // * Opera 13+ are not supported due to market share Sauce says
                 // * Android 4 emulators of sauce don't work properly
             ].forEach(function(browser) {
@@ -48,7 +39,7 @@ module.exports = function(grunt) {
                             urls: ["http://127.0.0.1:9000/testee.html?runner=sauce"],
                             build: process.env.TRAVIS_BUILD_NUMBER,
                             browsers: [],
-                            "max-duration": 720
+                            "max-duration": 240
                         }
                     };
                 }
