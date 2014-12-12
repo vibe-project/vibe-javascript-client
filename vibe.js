@@ -44,7 +44,6 @@
     var navigator = window.navigator;
     // Shortcut to find head tag
     var head = document.head || document.getElementsByTagName("head")[0] || document.documentElement;
-    
     // Most are inspired by jQuery
     var util = {
         makeAbsolute: function(url) {
@@ -292,13 +291,6 @@
     
     // Socket object
     function Socket(url, options) {
-        // Makes url absolute to normalize URL
-        url = util.makeAbsolute(url);
-        
-        // Options
-        var i;
-        // URI parts
-        var parts = /^([\w\+\.\-]+:)(?:\/\/([^\/?#:]*)(?::(\d+))?)?/.exec(url.toLowerCase());
         // Default options
         var defaults = {
             reconnect: function(lastDelay) {
@@ -308,10 +300,9 @@
             transports: ["ws", "stream", "longpoll"],
             xdrURL: null
         };
-        
         // Overrides defaults
         if (options) {
-            for (i in options) {
+            for (var i in options) {
                 defaults[i] = options[i];
             }
         }
@@ -319,7 +310,9 @@
         
         // Strictly speaking, the following values are not option
         // but assigns them to options for convenience of transport
-        options.url = url;
+        options.url = util.makeAbsolute(url);
+        // Origin parts
+        var parts = /^([\w\+\.\-]+:)(?:\/\/([^\/?#:]*)(?::(\d+))?)?/.exec(options.url.toLowerCase());
         options.crossOrigin = !!(parts && (
             // protocol 
             parts[1] != location.protocol ||
@@ -384,7 +377,7 @@
         };
         // Each event represents a possible state of this socket
         // they are considered as special event and works in a different way
-        for (i in {connecting: 1, open: 1, close: 1, waiting: 1}) {
+        for (var i in {connecting: 1, open: 1, close: 1, waiting: 1}) {
             // This event fires only one time and handlers being added after fire are fired immediately
             events[i] = Callbacks(true);
             // State transition order
@@ -569,10 +562,9 @@
                 }
                 return self.fire("open");
             }
-            
-            var latch;
             // Inbound event
             var event = util.parseJSON(data); 
+            var latch;
             var reply = function(success) {
                 return function(value) {
                     // The latch prevents double reply.
@@ -583,10 +575,7 @@
                 };
             };
             var args = [event.type, event.data, !event.reply ? null : {resolve: reply(true), reject: reply(false)}];
-            
-            return self.fire.apply(self, args)
-            // _message event for shared sockets
-            .fire("_message", args);
+            return self.fire.apply(self, args);
         };
         self.on("reply", function(reply) {
             // callbacks[reply.id] is [onResolved, onRejected]
@@ -594,7 +583,6 @@
             callbacks[reply.id][+reply.exception].call(self, reply.data);
             delete callbacks[reply.id];
         });
-        
         return self.open();
     }
 
@@ -602,14 +590,13 @@
     var transports = {};
     // WebSocket
     transports.ws = function(socket, options) {
-        var ws;
         var WebSocket = window.WebSocket;
-        var self = {};
-        
         if (!WebSocket) {
             return;
         }
         
+        var ws;
+        var self = {};
         self.open = function() {
             // Changes options.url's protocol part to ws or wss
             // options.url is absolute path
@@ -619,7 +606,7 @@
                 socket.receive(event.data);
             };
             ws.onerror = function() {
-                self.fire("error", new Error()).fire("close");
+                socket.fire("error", new Error()).fire("close");
             };
             ws.onclose = function() {
                 socket.fire("close");
@@ -644,7 +631,6 @@
                 return util.stringifyURL(options.url, {id: self.id});
             }
         };
-        
         // A ugly hack to intercept the first message for HTTP transports
         var receive = socket.receive;
         socket.receive = function(data) {
@@ -655,8 +641,8 @@
             receive.apply(socket, arguments);
             // And restores the method
             socket.receive = receive;
+            return socket;
         };
-        
         // Try again as long as the socket is opened
         function retry(data) {
             if (socket.state() === "opened") {
@@ -715,25 +701,30 @@
             document.body.appendChild(form);
             form.submit();
         };
+        // To notify server only once
+        var latch;
         self.close = function() {
             // Aborts the real connection
             self.abort();
-            // Sends the abort request to the server
-            // this request is supposed to run in unloading event so script tag should be used
-            var script = document.createElement("script");
-            script.async = false;
-            script.src = util.stringifyURL(options.url, {id: self.id, when: "abort"});
-            script.onload = script.onerror = script.onreadystatechange = function() {
-                if (!script.readyState || /loaded|complete/.test(script.readyState)) {
-                    script.onload = script.onreadystatechange = null;
-                    if (script.parentNode) {
-                        script.parentNode.removeChild(script);
+            if (!latch) {
+                latch = true;
+                // Sends the abort request to the server
+                // this request is supposed to run in unloading event so script tag should be used
+                var script = document.createElement("script");
+                script.async = false;
+                script.src = util.stringifyURL(options.url, {id: self.id, when: "abort"});
+                script.onload = script.onerror = script.onreadystatechange = function() {
+                    if (!script.readyState || /loaded|complete/.test(script.readyState)) {
+                        script.onload = script.onreadystatechange = null;
+                        if (script.parentNode) {
+                            script.parentNode.removeChild(script);
+                        }
+                        // Fires the close event but it may be already fired by transport
+                        socket.fire("close");
                     }
-                    // Fires the close event but it may be already fired by transport
-                    socket.fire("close");
-                }
-            };
-            head.insertBefore(script, head.firstChild);
+                };
+                head.insertBefore(script, head.firstChild);
+            }
         };
         return self;
     };
@@ -743,17 +734,15 @@
     };
     // Streaming - Server-Sent Events
     transports.sse = function(socket, options) {
-        var es;
         var EventSource = window.EventSource;
-        var self = transports.httpbase(socket, options);
-        
         if (!EventSource || (options.crossOrigin && util.browser.safari && util.browser.vmajor < 7)) {
             return;
         }
         
+        var es;
+        var self = transports.httpbase(socket, options);
         self.open = function() {
-            var url = self.uri.open() + "&sse=true";                
-            es = new EventSource(url, {withCredentials: true});
+            es = new EventSource(self.uri.open() + "&sse=true", {withCredentials: true});
             es.onmessage = function(event) {
                 socket.receive(event.data);
             };
@@ -772,7 +761,6 @@
     transports.streambase = function(socket, options) {
         var buffer = "";
         var self = transports.httpbase(socket, options);
-        
         // The detail about parsing is explained in the reference implementation
         self.parse = function(chunk) {
             // Strips off the left padding of the chunk that appears in the
@@ -780,11 +768,9 @@
             chunk = chunk.replace(/^\s+/, "");
             // The chunk should be not empty for correct parsing, 
             if (chunk) {
-                var i; 
                 // String.prototype.split with string separator is reliable cross-browser
                 var lines = (buffer + chunk).split("\n\n");
-                
-                for (i = 0; i < lines.length - 1; i++) {
+                for (var i = 0; i < lines.length - 1; i++) {
                     socket.receive(lines[i].substring("data: ".length));
                 }
                 buffer = lines[lines.length - 1];
@@ -794,28 +780,19 @@
     };
     // Streaming - XMLHttpRequest
     transports.streamxhr = function(socket, options) {
-        var xhr;
-        var self = transports.streambase(socket, options);
-        
         if ((util.browser.msie && util.browser.vmajor < 10) || (util.browser.opera && util.browser.vmajor < 13) || (options.crossOrigin && !util.corsable)) {
             return;
         }
         
+        var xhr;
+        var self = transports.streambase(socket, options);
         self.open = function() {
             var index;
-            var length; 
-            var url = self.uri.open();
-            
             xhr = util.xhr();
             xhr.onreadystatechange = function() {
                 if (xhr.readyState === 3 && xhr.status === 200) {
-                    length = xhr.responseText.length;
-                    if (!index) {
-                        self.parse(xhr.responseText);
-                    } else if (length > index) {
-                        self.parse(xhr.responseText.substring(index));
-                    }
-                    index = length;
+                    self.parse(!index ? xhr.responseText : xhr.responseText.substring(index));
+                    index = xhr.responseText.length;
                 } else if (xhr.readyState === 4) {
                     if (xhr.status !== 200) {
                         socket.fire("error", new Error());
@@ -823,11 +800,11 @@
                     socket.fire("close");
                 }
             };
-            xhr.open("GET", url);
+            xhr.open("GET", self.uri.open());
             if (util.corsable) {
                 xhr.withCredentials = true;
             }
-            xhr.send(null);
+            xhr.send();
         };
         self.abort = function() {
             xhr.abort();
@@ -836,28 +813,19 @@
     };
     // Streaming - XDomainRequest
     transports.streamxdr = function(socket, options) {
-        var xdr;
         var XDomainRequest = window.XDomainRequest;
-        var self = transports.streambase(socket, options);
-        
         if (!XDomainRequest || !options.xdrURL) {
             return;
         }
         
+        var xdr;
+        var self = transports.streambase(socket, options);
         self.open = function() {
             var index;
-            var length; 
-            var url = options.xdrURL.call(socket, self.uri.open());
-            
             xdr = new XDomainRequest();
             xdr.onprogress = function() {
-                length = xdr.responseText.length;
-                if (!index) {
-                    self.parse(xdr.responseText);
-                } else {
-                    self.parse(xdr.responseText.substring(index));
-                }
-                index = length;
+                self.parse(!index ? xdr.responseText : xdr.responseText.substring(index));
+                index = xdr.responseText.length;
             };
             xdr.onerror = function() {
                 socket.fire("error", new Error()).fire("close");
@@ -865,7 +833,7 @@
             xdr.onload = function() {
                 socket.fire("close");
             };
-            xdr.open("GET", url);
+            xdr.open("GET", options.xdrURL.call(socket, self.uri.open()));
             xdr.send();
         };
         self.abort = function() {
@@ -875,27 +843,15 @@
     };
     // Streaming - Iframe
     transports.streamiframe = function(socket, options) {
-        var doc;
-        var stop;
         var ActiveXObject = window.ActiveXObject;
-        var self = transports.streambase(socket, options);
-        
         if (!ActiveXObject || options.crossOrigin) {
             return;
-        } else {
-            // Internet Explorer 10 Metro doesn't support ActiveXObject
-            try {
-                new ActiveXObject("htmlfile");
-            } catch (e) {
-                return;
-            }
         }
         
+        var doc;
+        var stop;
+        var self = transports.streambase(socket, options);
         self.open = function() {
-            var iframe; 
-            var cdoc;
-            var url = self.uri.open();
-            
             function iterate(fn) {
                 var timeoutId;
                 // Though the interval is 1ms for real-time application, there is a delay between setTimeout calls
@@ -912,39 +868,35 @@
                     clearTimeout(timeoutId);
                 };
             }
-            
             doc = new ActiveXObject("htmlfile");
             doc.open();
             doc.close();
-            iframe = doc.createElement("iframe");
-            iframe.src = url;
+            var iframe = doc.createElement("iframe");
+            iframe.src = self.uri.open();
             doc.body.appendChild(iframe);
-            cdoc = iframe.contentDocument || iframe.contentWindow.document;
+            var cdoc = iframe.contentDocument || iframe.contentWindow.document;
             stop = iterate(function() {
+                // Waits the server's container ignorantly
+                if (!cdoc.firstChild) {
+                    return;
+                }
                 // Response container
-                var container;
+                var container = cdoc.body.lastChild;
+                // Detects connection failure
+                if (!container) {
+                    socket.fire("error", new Error()).fire("close");
+                    return false;
+                }
                 
                 function readDirty() {
-                    var text;
                     var clone = container.cloneNode(true);
                     // Adds a character not CR and LF to circumvent an Internet Explorer bug
                     // If the contents of an element ends with one or more CR or LF, Internet Explorer ignores them in the innerText property
                     clone.appendChild(cdoc.createTextNode("."));
                     // But the above idea causes \n chars to be replaced with \r\n or for some reason
                     // Restores them to its original state
-                    text = clone.innerText.replace(/\r\n/g, "\n");
+                    var text = clone.innerText.replace(/\r\n/g, "\n");
                     return text.substring(0, text.length - 1);
-                }
-                
-                // Waits the server's container ignorantly
-                if (!cdoc.firstChild) {
-                    return;
-                }
-                container = cdoc.body.lastChild;
-                // Detects connection failure
-                if (!container) {
-                    socket.fire("error", new Error()).fire("close");
-                    return false;
                 }
                 self.parse(readDirty());
                 // The container is resetable so no index or length variable is needed
@@ -978,37 +930,34 @@
         var self = transports.httpbase(socket, options);
         self.open = function() {
             self.connect(self.uri.open(), function(data) {
-                function onresponse(data) {
-                    if (data) {
-                        var match = /(\d+)\|(.*)/.exec(data);
-                        if (socket.state() === "connecting") {
-                            socket.receive(match[2]);
+                // A regexp to parse message into [id, data]
+                var rdata = /(\d+)\|(.*)/;
+                var match = rdata.exec(data);
+                // To set the transport id before polling
+                socket.receive(match[2]);
+                (function poll(msgId) {
+                    self.connect(util.stringifyURL(options.url, {id: self.id, when: "poll", lastMsgId: msgId}), function(data) {
+                        if (data) {
+                            var match = rdata.exec(data);
                             poll(match[1]);
+                            socket.receive(match[2]);
                         } else {
-                            poll(match[1]);
-                            socket.receive(match[2]);
+                            socket.fire("close");
                         }
-                    } else {
-                        socket.fire("close");
-                    }
-                }
-                onresponse(data);
-                function poll(msgId) {
-                    self.connect(util.stringifyURL(options.url, {id: self.id, when: "poll", lastMsgId: msgId}), onresponse);
-                }
+                    });
+                })(match[1]);
             });
         };
         return self;
     };
     // Long polling - AJAX
     transports.longpollajax = function(socket, options) {
-        var xhr;
-        var self = transports.longpollbase(socket, options);
-        
         if (options.crossOrigin && !util.corsable) {
             return;
         }
         
+        var xhr;
+        var self = transports.longpollbase(socket, options);
         self.connect = function(url, fn) {
             xhr = util.xhr();
             xhr.onreadystatechange = function() {
@@ -1034,14 +983,13 @@
     };
     // Long polling - XDomainRequest
     transports.longpollxdr = function(socket, options) {
-        var xdr;
         var XDomainRequest = window.XDomainRequest;
-        var self = transports.longpollbase(socket, options);
-        
         if (!XDomainRequest || !options.xdrURL) {
             return;
         }
-
+        
+        var xdr;
+        var self = transports.longpollbase(socket, options);
         self.connect = function(url, fn) {
             url = options.xdrURL.call(socket, url);
             xdr = new XDomainRequest();
@@ -1063,9 +1011,8 @@
     var jsonpCallbacks = [];
     transports.longpolljsonp = function(socket, options) {
         var script;
-        var callback = jsonpCallbacks.pop() || ("socket_" + (guid++));
         var self = transports.longpollbase(socket, options);
-        
+        var callback = jsonpCallbacks.pop() || ("socket_" + (guid++));
         // Attaches callback
         window[callback] = function(data) {
             script.responseText = data;
@@ -1085,7 +1032,7 @@
             script.src = url;
             script.clean = function() {
                 // Assigns null to attributes to avoid memory leak in IE
-                script.clean = script.onerror = script.onload = script.onreadystatechange = null;
+                script.clean = script.onerror = script.onload = script.onreadystatechange = script.responseText = null;
                 if (script.parentNode) {
                     script.parentNode.removeChild(script);
                 }
@@ -1116,7 +1063,6 @@
     var vibe = {};
     // Socket instances
     var sockets = [];
-
     // Creates a new socket and connects to the given url
     vibe.open = function(url, options) {
         // Opens a new socket
@@ -1127,12 +1073,10 @@
     // Exposes to help debug or apply hotfix but not public
     vibe.util = util;
     vibe.transports = transports;
-    
     // For browser environment
     util.on(window, "unload", function() {
-        var i;
         var socket;
-        for (i = 0; i < sockets.length; i++) {
+        for (var i = 0; i < sockets.length; i++) {
             socket = sockets[i];
             // Closes a socket as the document is unloaded
             if (socket.state() !== "closed") {
@@ -1141,9 +1085,8 @@
         }
     });
     util.on(window, "online", function() {
-        var i;
         var socket;
-        for (i = 0; i < sockets.length; i++) {
+        for (var i = 0; i < sockets.length; i++) {
             socket = sockets[i];
             // Opens a socket because of no reason to wait
             if (socket.state() === "waiting") {
@@ -1152,9 +1095,8 @@
         }
     });
     util.on(window, "offline", function() {
-        var i;
         var socket;
-        for (i = 0; i < sockets.length; i++) {
+        for (var i = 0; i < sockets.length; i++) {
             socket = sockets[i];
             // Fires a close event immediately
             if (socket.state() === "opened") {
@@ -1162,6 +1104,5 @@
             }
         }
     });
-    
     return vibe;
 }));
