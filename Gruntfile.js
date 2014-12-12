@@ -48,9 +48,6 @@ module.exports = function(grunt) {
                             urls: ["http://127.0.0.1:9000/testee.html?runner=sauce"],
                             build: process.env.TRAVIS_BUILD_NUMBER,
                             browsers: [],
-                            // Running Mocha instances concurrently is not recommended
-                            // https://groups.google.com/d/msg/mochajs/NBmSY70mPZw/m3QCxI19sTkJ
-                            throttled: 1,
                             "max-duration": 360
                         }
                     };
@@ -119,7 +116,7 @@ module.exports = function(grunt) {
         })
         .listen(9000, function() {
             var server = this;
-            var mocha = new Mocha();
+            var mocha = new Mocha().reporter("list");
             delete require.cache[require.resolve("./node_modules/vibe-protocol/test/client.js")];
             mocha.addFile("./node_modules/vibe-protocol/test/client.js");
             // Set options through process.argv
@@ -178,7 +175,7 @@ module.exports = function(grunt) {
             }
         };
         var runTest = function(session, query) {
-            var mocha = new Mocha();
+            var mocha = new Mocha().reporter("list");
             delete require.cache[require.resolve("./node_modules/vibe-protocol/test/client.js")];
             mocha.addFile("./node_modules/vibe-protocol/test/client.js");
             // Set options through process.argv
