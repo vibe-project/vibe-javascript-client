@@ -314,7 +314,6 @@
             reconnect: function(lastDelay) {
                 return 2 * (lastDelay || 250);
             },
-            sharing: false,
             timeout: false,
             transports: ["ws", "stream", "longpoll"],
             xdrURL: null
@@ -424,159 +423,6 @@
                 }, options.timeout);
                 self.once("open", clearTimeoutTimer).once("close", clearTimeoutTimer);
             }
-            
-            // TODO review
-            function share() {
-                var traceTimer;
-                var server;
-                var name = "socket-" + url;
-                var servers = {
-                    // Powered by the storage event and the localStorage
-                    // http://www.w3.org/TR/webstorage/#event-storage
-                    storage: function() {
-                        var storage = window.localStorage;
-                        // The storage event of Internet Explorer works strangely
-                        // TODO test Internet Explorer 11
-                        if (util.browser.msie) {
-                            return;
-                        }
-                        return {
-                            init: function() {
-                                function onstorage(event) {
-                                    // When a deletion, newValue initialized to null
-                                    if (event.key === name && event.newValue) {
-                                        listener(event.newValue);
-                                    }
-                                }
-                                // Handles the storage event
-                                util.on(window, "storage", onstorage);
-                                self.once("close", function() {
-                                    util.off(window, "storage", onstorage);
-                                    // Defers again to clean the storage
-                                    self.once("close", function() {
-                                        storage.removeItem(name);
-                                        storage.removeItem(name + "-opened");
-                                        storage.removeItem(name + "-children");
-                                    });
-                                });
-                            },
-                            broadcast: function(obj) {
-                                var string = util.stringifyJSON(obj);
-                                storage.setItem(name, string);
-                                setTimeout(function() {
-                                    listener(string);
-                                }, 50);
-                            },
-                            get: function(key) {
-                                return util.parseJSON(storage.getItem(name + "-" + key));
-                            },
-                            set: function(key, value) {
-                                storage.setItem(name + "-" + key, util.stringifyJSON(value));
-                            }
-                        };
-                    },
-                    // Powered by the window.open method
-                    // https://developer.mozilla.org/en/DOM/window.open
-                    windowref: function() {
-                        // Internet Explorer raises an invalid argument error
-                        // when calling the window.open method with the name containing non-word characters
-                        var neim = name.replace(/\W/g, "");
-                        var container = document.getElementById(neim);
-                        var win;
-                        if (!container) {
-                            container = document.createElement("div");
-                            container.id = neim;
-                            container.style.display = "none";
-                            container.innerHTML = '<iframe name="' + neim + '" />';
-                            document.body.appendChild(container);
-                        }
-                        win = container.firstChild.contentWindow;
-                        return {
-                            init: function() {
-                                // Callbacks from different windows
-                                win.callbacks = [listener];
-                                // In Internet Explorer 8 and less, only string argument can be safely passed to the function in other window
-                                win.fire = function(string) {
-                                    var i;
-                                    for (i = 0; i < win.callbacks.length; i++) {
-                                        win.callbacks[i](string);
-                                    }
-                                };
-                            },
-                            broadcast: function(obj) {
-                                if (!win.closed && win.fire) {
-                                    win.fire(util.stringifyJSON(obj));
-                                }
-                            },
-                            get: function(key) {
-                                return !win.closed ? win[key] : null;
-                            },
-                            set: function(key, value) {
-                                if (!win.closed) {
-                                    win[key] = value;
-                                }
-                            }
-                        };
-                    }
-                };
-                
-                // Receives send and close command from the children
-                function listener(string) {
-                    var data;
-                    var command = util.parseJSON(string);
-                    if (command.target === "p") {
-                        switch (command.type) {
-                        case "send":
-                            data = util.parseJSON(command.data);
-                            self.send(data.type, data.data);
-                            break;
-                        case "close":
-                            self.close();
-                            break;
-                        }
-                    }
-                }
-                
-                function propagateMessageEvent(args) {
-                    server.broadcast({target: "c", type: "message", data: args});
-                }
-                
-                function leaveTrace() {
-                    document.cookie = encodeURIComponent(name) + "=" +
-                        encodeURIComponent(util.stringifyJSON({ts: util.now(), heir: (server.get("children") || [])[0]})) +
-                        "; path=/";
-                }
-                
-                // Chooses a server
-                server = servers.storage() || servers.windowref();
-                server.init();
-                // List of children sockets
-                server.set("children", []);
-                // Flag indicating the parent socket is opened
-                server.set("opened", false);
-                // Leaves traces
-                leaveTrace();
-                traceTimer = setInterval(leaveTrace, 1000);
-                self.on("_message", propagateMessageEvent)
-                .once("open", function() {
-                    server.set("opened", true);
-                    server.broadcast({target: "c", type: "open"});
-                })
-                .once("close", function() {
-                    // Clears trace timer
-                    clearInterval(traceTimer);
-                    // Removes the trace
-                    document.cookie = encodeURIComponent(name) + "=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/";
-                    // The heir is the parent unless unloading
-                    server.broadcast({target: "c", type: "close", data: {heir: !unloading ? options.id : (server.get("children") || [])[0]}});
-                    self.off("_message", propagateMessageEvent);
-                });
-            }
-            
-            // Makes connection sharable  
-            if (options.sharing && !isSessionTransport) {
-                share();
-            }
         })
         .on("open", function() {
             // From connecting state
@@ -650,7 +496,6 @@
         // Networking
         // Transport
         var transport;
-        var isSessionTransport;
         // Reconnection
         var reconnectTimer;
         var reconnectDelay;
@@ -666,7 +511,7 @@
                 events[type].unlock();
             }
             // Chooses transport
-            transport = isSessionTransport = null;
+            transport = null;
             // From null or waiting state
             state = "preparing";
             // Increases the number of reconnection attempts
@@ -675,10 +520,6 @@
             }
             
             var candidates = slice.call(options.transports);
-            // Check if possible to make use of a shared socket
-            if (options.sharing) {
-                candidates.unshift("session");
-            }
             while (!transport && candidates.length) {
                 type = candidates.shift();
                 // A transport instance will be null if it can't run on this environment
@@ -687,7 +528,6 @@
             // Fires the connecting event and connects
             if (transport) {
                 options.transport = type;
-                isSessionTransport = type === "session";
                 self.fire("connecting");
                 transport.open();
             } else {
@@ -770,193 +610,6 @@
 
     // A group of transport object
     var transports = {};
-    // Session socket for connection sharing
-    // TODO review
-    transports.session = function(socket, options) {
-        var trace;
-        var orphan;
-        var connector;
-        var name = "socket-" + options.url;
-        var connectors = {
-            storage: function() {
-                // The storage event of Internet Explorer works strangely
-                // TODO test Internet Explorer 11
-                if (util.browser.msie) {
-                    return;
-                }
-                
-                var storage = window.localStorage;
-                var get = function(key) {
-                    return util.parseJSON(storage.getItem(name + "-" + key));
-                };
-                var set = function(key, value) {
-                    storage.setItem(name + "-" + key, util.stringifyJSON(value));
-                };
-                return {
-                    init: function() {
-                        function onstorage(event) {
-                            if (event.key === name && event.newValue) {
-                                listener(event.newValue);
-                            }
-                        }
-                        
-                        set("children", get("children").concat([options.id]));
-                        util.on(window, "storage", onstorage);
-                        socket.once("close", function() {
-                            var children = get("children");
-                            util.off(window, "storage", onstorage);
-                            if (children) {
-                                if (removeFromArray(children, options.id)) {
-                                    set("children", children);
-                                }
-                            }
-                        });
-                        return get("opened");
-                    },
-                    broadcast: function(obj) {
-                        var string = util.stringifyJSON(obj);
-                        storage.setItem(name, string);
-                        setTimeout(function() {
-                            listener(string);
-                        }, 50);
-                    }
-                };
-            },
-            windowref: function() {
-                var win = window.open("", name.replace(/\W/g, ""));
-                if (!win || win.closed || !win.callbacks) {
-                    return;
-                }
-                return {
-                    init: function() {
-                        win.callbacks.push(listener);
-                        win.children.push(options.id);
-                        socket.once("close", function() {
-                            // Removes traces only if the parent is alive
-                            if (!orphan) {
-                                removeFromArray(win.callbacks, listener);
-                                removeFromArray(win.children, options.id);
-                            }
-                        });
-                        return win.opened;
-                    },
-                    broadcast: function(obj) {
-                        if (!win.closed && win.fire) {
-                            win.fire(util.stringifyJSON(obj));
-                        }
-                    }
-                };
-            }
-        };
-        
-        function removeFromArray(array, val) {
-            var i, length = array.length;
-            for (i = 0; i < length; i++) {
-                if (array[i] === val) {
-                    array.splice(i, 1);
-                }
-            }
-            return length !== array.length;
-        }
-        
-        // Receives open, close and message command from the parent
-        function listener(string) {
-            var command = util.parseJSON(string), data = command.data;
-            
-            if (command.target === "c") {
-                switch (command.type) {
-                case "open":
-                    socket.fire("open");
-                    break;
-                case "close":
-                    if (!orphan) {
-                        orphan = true;
-                        // Gives the heir some time to reconnect
-                        if (data.heir === options.id) {
-                            socket.fire("close");
-                        } else {
-                            setTimeout(function() {
-                                socket.fire("close");
-                            }, 100);
-                        }
-                    }
-                    break;
-                case "message":
-                    // When using the session transport, message events could be sent before the open event
-                    if (socket.state() === "connecting") {
-                        socket.once("open", function() {
-                            socket.fire.apply(socket, data);
-                        });
-                    } else {
-                        socket.fire.apply(socket, data);
-                    }
-                    break;
-                }
-            }
-        }
-        
-        function findTrace() {
-            var matcher = new RegExp("(?:^|; )(" + encodeURIComponent(name) + ")=([^;]*)").exec(document.cookie);
-            if (matcher) {
-                return util.parseJSON(decodeURIComponent(matcher[2]));
-            }
-        }
-        
-        // Finds and validates the parent socket's trace from the cookie
-        trace = findTrace();
-        if (!trace || util.now() - trace.ts > 1000) {
-            return;
-        }
-        
-        // Chooses a connector
-        connector = connectors.storage() || connectors.windowref();
-        if (!connector) {
-            return;
-        }
-        
-        return {
-            open: function() {
-                var traceTimer;
-                var parentOpened;
-                var timeout = options.timeout;
-                var heartbeat = options.heartbeat;
-                
-                // Prevents side effects
-                options.timeout = options.heartbeat = false;
-                // Checks the shared one is alive
-                traceTimer = setInterval(function() {
-                    var oldTrace = trace;
-                    trace = findTrace();
-                    if (!trace || oldTrace.ts === trace.ts) {
-                        // Simulates a close signal
-                        listener(util.stringifyJSON({target: "c", type: "close", data: {heir: oldTrace.heir}}));
-                    }
-                }, 1000);
-                // Restores options
-                socket.once("close", function() {
-                    clearInterval(traceTimer);
-                    options.timeout = timeout;
-                    options.heartbeat = heartbeat;
-                });
-                parentOpened = connector.init();
-                if (parentOpened) {
-                    // Gives the user the opportunity to bind connecting event handlers
-                    setTimeout(function() {
-                        socket.fire("open");
-                    }, 50);
-                }
-            },
-            send: function(event) {
-                connector.broadcast({target: "p", type: "send", data: event});
-            },
-            close: function() {
-                // Do not signal the parent if this method is executed by the unload event handler
-                if (!unloading) {
-                    connector.broadcast({target: "p", type: "close"});
-                }
-            }
-        };
-    };
     // WebSocket
     transports.ws = function(socket, options) {
         var ws;
