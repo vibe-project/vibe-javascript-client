@@ -193,8 +193,6 @@
             /(msie) ([\w.]+)/.exec(ua) ||
             // IE 11+
             /(trident)(?:.*? rv:([\w.]+)|)/.exec(ua) ||
-            // Opera
-            /(opera)(?:.*version|)[ \/]([\w.]+)/.exec(ua) || 
             // Safari
             ua.indexOf("android") < 0 && /version\/(.+) (safari)/.exec(ua) || [];
 
@@ -774,7 +772,7 @@
     };
     // Streaming - XMLHttpRequest
     transports.streamxhr = function(socket, options) {
-        if ((util.browser.msie && util.browser.vmajor < 10) || (util.browser.opera && util.browser.vmajor < 13) || (options.crossOrigin && !util.corsable)) {
+        if ((util.browser.msie && util.browser.vmajor < 10) || (options.crossOrigin && !util.corsable)) {
             return;
         }
         
