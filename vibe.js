@@ -308,7 +308,7 @@
         // Origin parts
         var parts = /^([\w\+\.\-]+:)(?:\/\/([^\/?#:]*)(?::(\d+))?)?/.exec(options.url.toLowerCase());
         options.crossOrigin = !!(parts && (
-            // protocol 
+            // protocol
             parts[1] != location.protocol ||
             // hostname
             parts[2] != location.hostname ||
