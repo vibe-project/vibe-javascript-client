@@ -45,142 +45,141 @@
     // Shortcut to find head tag
     var head = document.head || document.getElementsByTagName("head")[0] || document.documentElement;
     // Most are inspired by jQuery
-    var util = {
-        makeAbsolute: function(url) {
-            var div = document.createElement("div");
-            // Uses an innerHTML property to obtain an absolute URL
-            div.innerHTML = '<a href="' + url + '"/>';
-            // encodeURI and decodeURI are needed to normalize URL between Internet Explorer and non-Internet Explorer,
-            // since Internet Explorer doesn't encode the href property value and return it - http://jsfiddle.net/Yq9M8/1/
-            return encodeURI(decodeURI(div.firstChild.href));
-        },
-        on: function(elem, type, fn) {
-            if (elem.addEventListener) {
-                elem.addEventListener(type, fn, false);
-            } else if (elem.attachEvent) {
-                elem.attachEvent("on" + type, fn);
+    var util = {};
+    util.makeAbsolute = function(url) {
+        var div = document.createElement("div");
+        // Uses an innerHTML property to obtain an absolute URL
+        div.innerHTML = '<a href="' + url + '"/>';
+        // encodeURI and decodeURI are needed to normalize URL between Internet Explorer and non-Internet Explorer,
+        // since Internet Explorer doesn't encode the href property value and return it - http://jsfiddle.net/Yq9M8/1/
+        return encodeURI(decodeURI(div.firstChild.href));
+    };
+    util.on = function(elem, type, fn) {
+        if (elem.addEventListener) {
+            elem.addEventListener(type, fn, false);
+        } else if (elem.attachEvent) {
+            elem.attachEvent("on" + type, fn);
+        }
+    };
+    util.off = function(elem, type, fn) {
+        if (elem.removeEventListener) {
+            elem.removeEventListener(type, fn, false);
+        } else if (elem.detachEvent) {
+            elem.detachEvent("on" + type, fn);
+        }
+    };
+    util.stringifyURI = function(url, params) {
+        var name;
+        var s = [];
+        params = params || {};
+        params._ = guid++;
+        // params is supposed to be one-depth object
+        for (name in params) {
+            // null or undefined param value should be excluded 
+            if (params[name] != null) {
+                s.push(encodeURIComponent(name) + "=" + encodeURIComponent(params[name]));
             }
-        },
-        off: function(elem, type, fn) {
-            if (elem.removeEventListener) {
-                elem.removeEventListener(type, fn, false);
-            } else if (elem.detachEvent) {
-                elem.detachEvent("on" + type, fn);
+        }
+        return url + (/\?/.test(url) ? "&" : "?") + s.join("&").replace(/%20/g, "+");
+    };
+    util.parseURI = function(url) {
+        // Deal with only query part
+        var obj = {query: {}};
+        var match = /.*\?([^#]*)/.exec(url);
+        if (match) {
+            var array = match[1].split("&");
+            for (var i = 0; i < array.length; i++) {
+                var part = array[i].split("=");
+                obj.query[decodeURIComponent(part[0])] = decodeURIComponent(part[1] || "");
             }
-        },
-        stringifyURI: function(url, params) {
-            var name;
-            var s = [];
-            params = params || {};
-            params._ = guid++;
-            // params is supposed to be one-depth object
-            for (name in params) {
-                // null or undefined param value should be excluded 
-                if (params[name] != null) {
-                    s.push(encodeURIComponent(name) + "=" + encodeURIComponent(params[name]));
-                }
-            }
-            return url + (/\?/.test(url) ? "&" : "?") + s.join("&").replace(/%20/g, "+");
-        },
-        parseURI: function(url) {
-            // Deal with only query part
-            var obj = {query: {}};
-            var match = /.*\?([^#]*)/.exec(url);
-            if (match) {
-                var array = match[1].split("&");
-                for (var i = 0; i < array.length; i++) {
-                    var part = array[i].split("=");
-                    obj.query[decodeURIComponent(part[0])] = decodeURIComponent(part[1] || "");
-                }
-            }
-            return obj;
-        },
-        xhr: function() {
+        }
+        return obj;
+    };
+    util.xhr = function() {
+        try {
+            return new window.XMLHttpRequest();
+        } catch (e1) {
             try {
-                return new window.XMLHttpRequest();
-            } catch (e1) {
-                try {
-                    return new window.ActiveXObject("Microsoft.XMLHTTP");
-                } catch (e2) {}
+                return new window.ActiveXObject("Microsoft.XMLHTTP");
+            } catch (e2) {}
+        }
+    };
+    util.parseJSON = window.JSON ? window.JSON.parse : function(data) {
+        return Function("return " + data)();
+    };
+    // http://github.com/flowersinthesand/stringifyJSON
+    util.stringifyJSON = window.JSON ? window.JSON.stringify : function(value) {
+        var escapable = /[\\\"\x00-\x1f\x7f-\x9f\u00ad\u0600-\u0604\u070f\u17b4\u17b5\u200c-\u200f\u2028-\u202f\u2060-\u206f\ufeff\ufff0-\uffff]/g,
+            meta = {
+                '\b': '\\b',
+                '\t': '\\t',
+                '\n': '\\n',
+                '\f': '\\f',
+                '\r': '\\r',
+                '"': '\\"',
+                '\\': '\\\\'
+            };
+        
+        function quote(string) {
+            return '"' + string.replace(escapable, function(a) {
+                var c = meta[a];
+                return typeof c === "string" ? c : "\\u" + ("0000" + a.charCodeAt(0).toString(16)).slice(-4);
+            }) + '"';
+        }
+        
+        function f(n) {
+            return n < 10 ? "0" + n : n;
+        }
+        
+        return (function str(key, holder) {
+            var i, v, len, partial, value = holder[key], type = typeof value;
+                    
+            if (value && typeof value === "object" && typeof value.toJSON === "function") {
+                value = value.toJSON(key);
+                type = typeof value;
             }
-        },
-        parseJSON: window.JSON ? window.JSON.parse : function(data) {
-            return Function("return " + data)();
-        },
-        // http://github.com/flowersinthesand/stringifyJSON
-        stringifyJSON: window.JSON ? window.JSON.stringify : function(value) {
-            var escapable = /[\\\"\x00-\x1f\x7f-\x9f\u00ad\u0600-\u0604\u070f\u17b4\u17b5\u200c-\u200f\u2028-\u202f\u2060-\u206f\ufeff\ufff0-\uffff]/g,
-                meta = {
-                    '\b': '\\b',
-                    '\t': '\\t',
-                    '\n': '\\n',
-                    '\f': '\\f',
-                    '\r': '\\r',
-                    '"': '\\"',
-                    '\\': '\\\\'
-                };
             
-            function quote(string) {
-                return '"' + string.replace(escapable, function(a) {
-                    var c = meta[a];
-                    return typeof c === "string" ? c : "\\u" + ("0000" + a.charCodeAt(0).toString(16)).slice(-4);
-                }) + '"';
-            }
-            
-            function f(n) {
-                return n < 10 ? "0" + n : n;
-            }
-            
-            return (function str(key, holder) {
-                    var i, v, len, partial, value = holder[key], type = typeof value;
-                            
-                    if (value && typeof value === "object" && typeof value.toJSON === "function") {
-                        value = value.toJSON(key);
-                        type = typeof value;
+            switch (type) {
+            case "string":
+                return quote(value);
+            case "number":
+                return isFinite(value) ? String(value) : "null";
+            case "boolean":
+                return String(value);
+            case "object":
+                if (!value) {
+                    return "null";
+                }
+                
+                switch (toString.call(value)) {
+                case "[object Date]":
+                    return isFinite(value.valueOf()) ?
+                        '"' + value.getUTCFullYear() + "-" + f(value.getUTCMonth() + 1) + "-" + f(value.getUTCDate()) +
+                        "T" + f(value.getUTCHours()) + ":" + f(value.getUTCMinutes()) + ":" + f(value.getUTCSeconds()) + "Z" + '"' :
+                        "null";
+                case "[object Array]":
+                    len = value.length;
+                    partial = [];
+                    for (i = 0; i < len; i++) {
+                        partial.push(str(i, value) || "null");
                     }
                     
-                    switch (type) {
-                    case "string":
-                        return quote(value);
-                    case "number":
-                        return isFinite(value) ? String(value) : "null";
-                    case "boolean":
-                        return String(value);
-                    case "object":
-                        if (!value) {
-                            return "null";
-                        }
-                        
-                        switch (toString.call(value)) {
-                        case "[object Date]":
-                            return isFinite(value.valueOf()) ?
-                                '"' + value.getUTCFullYear() + "-" + f(value.getUTCMonth() + 1) + "-" + f(value.getUTCDate()) +
-                                "T" + f(value.getUTCHours()) + ":" + f(value.getUTCMinutes()) + ":" + f(value.getUTCSeconds()) + "Z" + '"' :
-                                "null";
-                        case "[object Array]":
-                            len = value.length;
-                            partial = [];
-                            for (i = 0; i < len; i++) {
-                                partial.push(str(i, value) || "null");
+                    return "[" + partial.join(",") + "]";
+                default:
+                    partial = [];
+                    for (i in value) {
+                        if (hasOwn.call(value, i)) {
+                            v = str(i, value);
+                            if (v) {
+                                partial.push(quote(i) + ":" + v);
                             }
-                            
-                            return "[" + partial.join(",") + "]";
-                        default:
-                            partial = [];
-                            for (i in value) {
-                                if (hasOwn.call(value, i)) {
-                                    v = str(i, value);
-                                    if (v) {
-                                        partial.push(quote(i) + ":" + v);
-                                    }
-                                }
-                            }
-                            
-                            return "{" + partial.join(",") + "}";
                         }
                     }
-                })("", {"": value});
-        }
+                    
+                    return "{" + partial.join(",") + "}";
+                }
+            }
+        })("", {"": value});
     };
     // CORS able
     util.corsable = "withCredentials" in util.xhr();
@@ -399,7 +398,7 @@
             options.reconnect = false;
             clearTimeout(reconnectTimer);
             if (transport) {
-                // It finally fires close event on socket
+                // It finally fires close event to socket
                 transport.close();
             } else {
                 // If this method is called while connecting to the server
