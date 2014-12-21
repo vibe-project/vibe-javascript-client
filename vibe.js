@@ -1,5 +1,5 @@
 /*
- * Vibe v3.0.0-Alpha4
+ * Vibe v3.0.0-Alpha5
  * http://vibe-project.github.io/projects/vibe-javascript-client/
  * 
  * Copyright 2014 The Vibe Project 
@@ -288,7 +288,7 @@
             reconnect: function(lastDelay) {
                 return 2 * (lastDelay || 250);
             },
-            timeout: false,
+            timeout: 3000,
             transports: ["ws", "stream", "longpoll"],
             xdrURL: null
         };
@@ -316,7 +316,6 @@
 
         // Socket
         var self = {};
-        
         // Events
         var events = {};
         // Adds event handler
@@ -348,7 +347,6 @@
                 self.off(type, proxy);
                 fn.apply(self, arguments);
             }
-            
             fn.guid = fn.guid || guid++;
             proxy.guid = fn.guid;
             return self.on(type, proxy);
@@ -361,7 +359,54 @@
             }
             return this;
         };
-        
+
+        // Networking
+        // Transport associated with this socket
+        var transport;
+        // Reconnection
+        var reconnectTimer;
+        var reconnectDelay;
+        var reconnectTry;
+        // For internal use only
+        // Establishes a connection
+        self.open = function() {
+            // From null or waiting state
+            state = "preparing";
+            // Resets the transport
+            transport = null;
+            // Cancels the scheduled connection
+            clearTimeout(reconnectTimer);
+            // Increases the number of reconnection attempts
+            if (reconnectTry) {
+                reconnectTry++;
+            }
+            // Resets event helpers
+            for (var type in events) {
+                events[type].unlock();
+            }
+            if (options.transports.length) {
+                // Fires the connecting event and connects to the server
+                self.fire("connecting");
+            } else {
+                // There is no available transport
+                self.fire("error", new Error("notransport")).fire("close");
+            }
+            return this;
+        };
+        // Disconnects the connection
+        self.close = function() {
+            // Prevents reconnection
+            options.reconnect = false;
+            clearTimeout(reconnectTimer);
+            if (transport) {
+                // It finally fires close event on socket
+                transport.close();
+            } else {
+                // If this method is called while connecting to the server
+                self.fire("close");
+            }
+            return this;
+        };
         // State
         var state;
         self.state = function() {
@@ -384,27 +429,90 @@
         self.on("connecting", function() {
             // From preparing state
             state = "connecting";
-            
-            var timeoutTimer;
-            function clearTimeoutTimer() {
-                clearTimeout(timeoutTimer);
+            // Initializes transport
+            function initTransport(trans) {
+                transport = trans;
+                var skip;
+                transport.on("message", function(data) {
+                    // Because this handler is executed on dispatching message event, 
+                    // first message for handshaking should be skipped
+                    if (!skip) {
+                        skip = true;
+                        return;
+                    }
+                    // Inbound event
+                    var event = util.parseJSON(data); 
+                    var latch;
+                    var reply = function(success) {
+                        return function(value) {
+                            // The latch prevents double reply.
+                            if (!latch) {
+                                latch = true;
+                                self.send("reply", {id: event.id, data: value, exception: !success});
+                            }
+                        };
+                    };
+                    var args = [event.type, event.data, !event.reply ? null : {resolve: reply(true), reject: reply(false)}];
+                    self.fire.apply(self, args);
+                })
+                .on("error", function(error) {
+                    self.fire("error", error);
+                })
+                .on("close", function() {
+                    self.fire("close");
+                });
             }
-            
-            // Sets a timeout timer and clear it on open or close event
-            if (options.timeout > 0) {
-                timeoutTimer = setTimeout(function() {
-                    self.fire("error", new Error("timeout"));
-                    transport.close();
-                }, options.timeout);
-                self.once("open", clearTimeoutTimer).once("close", clearTimeoutTimer);
+            // A temporary transport to find working transport
+            var trans;
+            var candidates = slice.call(options.transports);
+            // Tries connection with next available transport
+            function open() {
+                var type = candidates.shift();
+                // If every available transport failed
+                if (!type) {
+                    self.fire("error", new Error()).fire("close");
+                    return;
+                }
+                trans = transports[type](options);
+                // A transport instance will be null if it can't run on this environment
+                if (!trans) {
+                    open();
+                    return;
+                }
+                // TODO find other way
+                options.transport = type;
+                trans.on("close", open).on("message", function handshaker(data) {
+                    trans.off("message", handshaker);
+                    var query = util.parseURI(data).query;
+                    // An heartbeat option can't be set by user
+                    options.heartbeat = +query.heartbeat;
+                    // To speed up heartbeat test
+                    options._heartbeat = +query._heartbeat || 5000;
+                    // Now that handshaking is completed, 
+                    // removes event handler for finding working transport, initializes the transport 
+                    initTransport(trans.off("close", open));
+                    // And fires open event to socket
+                    self.fire("open");
+                })
+                .open();
             }
+            // This is to stop the whole process to find a working transport 
+            // when socket's close method is called while doing that
+            function stop() {
+                trans.off("close", open).close();
+            }
+            self.once("close", stop).once("open", function() {
+                self.off("close", stop);
+            });
+            // Starts a process to find a working transport
+            open();
         })
         .on("open", function() {
             // From connecting state
             state = "opened";
-            
             var heartbeatTimer;
-            function setHeartbeatTimer() {
+            // Sets a heartbeat timer and clears it on close event
+            (function setHeartbeatTimer() {
                 // heartbeat event will be sent after options.heartbeat - options._heartbeat ms
                 heartbeatTimer = setTimeout(function() {
                     self.send("heartbeat").once("heartbeat", function() {
@@ -418,15 +526,10 @@
                         transport.close();
                     }, options._heartbeat);
                 }, options.heartbeat - options._heartbeat);
-            }
-            
-            // Sets a heartbeat timer and clears it on close event
-            if (options.heartbeat > options._heartbeat) {
-                setHeartbeatTimer();
-                self.once("close", function() {
-                    clearTimeout(heartbeatTimer);
-                });
-            }
+            })();
+            self.once("close", function() {
+                clearTimeout(heartbeatTimer);
+            });
             // Locks the connecting event
             events.connecting.lock();
             // Initializes variables related with reconnection
@@ -435,15 +538,10 @@
         .on("close", function() {
             // From preparing, connecting or opened state
             state = "closed";
-            
-            var type;
-            var event;
-            var order = events.close.order;
-            
             // Locks event whose order is lower than close event
-            for (type in events) {
-                event = events[type];
-                if (event.order < order) {
+            for (var type in events) {
+                var event = events[type];
+                if (event.order < events.close.order) {
                     event.lock();
                 }
             }
@@ -468,60 +566,6 @@
             state = "waiting";
         });
         
-        // Networking
-        // Transport
-        var transport;
-        // Reconnection
-        var reconnectTimer;
-        var reconnectDelay;
-        var reconnectTry;        
-        // Establishes a connection
-        self.open = function() {
-            var type;
-            
-            // Cancels the scheduled connection
-            clearTimeout(reconnectTimer);
-            // Resets event helpers
-            for (type in events) {
-                events[type].unlock();
-            }
-            // Chooses transport
-            transport = null;
-            // From null or waiting state
-            state = "preparing";
-            // Increases the number of reconnection attempts
-            if (reconnectTry) {
-                reconnectTry++;
-            }
-            
-            var candidates = slice.call(options.transports);
-            while (!transport && candidates.length) {
-                type = candidates.shift();
-                // A transport instance will be null if it can't run on this environment
-                transport = transports[type](self, options);
-            }
-            // Fires the connecting event and connects
-            if (transport) {
-                options.transport = type;
-                self.fire("connecting");
-                transport.open();
-            } else {
-                self.fire("error", new Error("notransport")).fire("close");
-            }
-            return this;
-        };
-        // Disconnects the connection
-        self.close = function() {
-            // Prevents reconnection
-            options.reconnect = false;
-            clearTimeout(reconnectTimer);
-            // Delegates to the transport
-            if (transport) {
-                transport.close();
-            }
-            return this;
-        };
-        
         // Messaging
         // A map for reply callback
         var callbacks = {};
@@ -540,35 +584,6 @@
             transport.send(util.stringifyJSON(event));
             return this;
         };
-        // For internal use only
-        // receives an event from the server via the connection
-        self.receive = function(data) {
-            // The first message is handshake result 
-            if (state === "connecting") {
-                var query = util.parseURI(data).query;
-                // An heartbeat option can't be set by user
-                options.heartbeat = +query.heartbeat;
-                // To speed up heartbeat test
-                if (query._heartbeat) {
-                    options._heartbeat = +query._heartbeat;
-                }
-                return self.fire("open");
-            }
-            // Inbound event
-            var event = util.parseJSON(data); 
-            var latch;
-            var reply = function(success) {
-                return function(value) {
-                    // The latch prevents double reply.
-                    if (!latch) {
-                        latch = true;
-                        self.send("reply", {id: event.id, data: value, exception: !success});
-                    }
-                };
-            };
-            var args = [event.type, event.data, !event.reply ? null : {resolve: reply(true), reject: reply(false)}];
-            return self.fire.apply(self, args);
-        };
         self.on("reply", function(reply) {
             // callbacks[reply.id] is [onResolved, onRejected]
             // FYI +false and +true is 0 and 1, respectively
@@ -580,28 +595,60 @@
 
     // A group of transport object
     var transports = {};
+    // Base
+    transports.base = function(options) {
+        var self = {};
+        self.open = function() {
+            // Establishes a real connection
+            self.connect();
+            // Sets a timeout timer and clear it on open or close event
+            var timeoutTimer = setTimeout(function() {
+                self.fire("error", new Error("timeout")).close();
+            }, options.timeout);
+            function clearTimeoutTimer() {
+                clearTimeout(timeoutTimer);
+            }
+            self.on("open", clearTimeoutTimer).on("close", clearTimeoutTimer);
+        };
+        // Transport events
+        var events = {open: Callbacks(true), message: Callbacks(), error: Callbacks(), close: Callbacks(true)};
+        self.on = function(type, fn) {
+            events[type].add(fn);
+            return this;
+        };
+        self.off = function(type, fn) {
+            events[type].remove(fn);
+            return this;
+        };
+        self.fire = function(type) {
+            events[type].fire(self, slice.call(arguments, 1));
+            return this;
+        };
+        return self;
+    };
     // WebSocket
-    transports.ws = function(socket, options) {
+    transports.ws = function(options) {
         var WebSocket = window.WebSocket;
         if (!WebSocket) {
             return;
         }
-        
         var ws;
-        var self = {};
-        self.open = function() {
+        var self = transports.base(options);
+        self.connect = function() {
             // Changes options.url's protocol part to ws or wss
             // options.url is absolute path
-            var url = options.url.replace(/^http/, "ws");                
-            ws = new WebSocket(url);
+            ws = new WebSocket(options.url.replace(/^http/, "ws"));
+            ws.onopen = function() {
+                self.fire("open");
+            };
             ws.onmessage = function(event) {
-                socket.receive(event.data);
+                self.fire("message", event.data);
             };
             ws.onerror = function() {
-                socket.fire("error", new Error()).fire("close");
+                self.fire("error", new Error()).fire("close");
             };
             ws.onclose = function() {
-                socket.fire("close");
+                self.fire("close");
             };
         };
         self.send = function(data) {
@@ -613,31 +660,26 @@
         return self;
     };
     // HTTP Base
-    transports.httpbase = function(socket, options) {
-        var self = {};
+    transports.httpbase = function(options) {
+        var self = transports.base(options);
         self.uri = {
             open: function() {
-                return util.stringifyURI(options.url, {id: self.id, when: "open", transport: options.transport});
+                return util.stringifyURI(options.url, {when: "open", transport: options.transport});
             },
             send: function() {
                 return util.stringifyURI(options.url, {id: self.id});
             }
         };
-        // A ugly hack to intercept the first message for HTTP transports
-        var receive = socket.receive;
-        socket.receive = function(data) {
-            var query = util.parseURI(data).query;
-            // Assign a newly issued identifier for this socket
-            self.id = query.id;
-            // Executes the original method
-            receive.apply(socket, arguments);
-            // And restores the method
-            socket.receive = receive;
-            return socket;
-        };
-        // Try again as long as the socket is opened
+        var opened;
+        self.on("open", function() {
+            opened = true;
+        })
+        .on("close", function() {
+            opened = false;
+        });
+        // Try again as long as the transport is opened
         function retry(data) {
-            if (socket.state() === "opened") {
+            if (opened) {
                 self.send(data);
             }
         }
@@ -665,7 +707,7 @@
             xdr.onerror = function() {
                 retry(data);
             };
-            xdr.open("POST", options.xdrURL.call(socket, self.uri.send()));
+            xdr.open("POST", options.xdrURL.call(self, self.uri.send()));
             xdr.send("data=" + data);
         } :
         // By HTMLFormElement
@@ -712,7 +754,7 @@
                             script.parentNode.removeChild(script);
                         }
                         // Fires the close event but it may be already fired by transport
-                        socket.fire("close");
+                        self.fire("close");
                     }
                 };
                 head.insertBefore(script, head.firstChild);
@@ -721,27 +763,36 @@
         return self;
     };
     // Streaming
-    transports.stream = function(socket, options) {
-        return transports.sse(socket, options) || transports.streamxhr(socket, options) || transports.streamxdr(socket, options) || transports.streamiframe(socket, options);
+    transports.stream = function(options) {
+        return transports.sse(options) || transports.streamxhr(options) || transports.streamxdr(options) || transports.streamiframe(options);
     };
     // Streaming - Server-Sent Events
-    transports.sse = function(socket, options) {
+    transports.sse = function(options) {
         var EventSource = window.EventSource;
         if (!EventSource || (options.crossOrigin && util.browser.safari && util.browser.vmajor < 7)) {
             return;
         }
-        
         var es;
-        var self = transports.httpbase(socket, options);
-        self.open = function() {
+        var self = transports.httpbase(options);
+        self.connect = function() {
             es = new EventSource(self.uri.open() + "&sse=true", {withCredentials: true});
+            var handshaked;
             es.onmessage = function(event) {
-                socket.receive(event.data);
+                // The first message is handshake result
+                if (!handshaked) {
+                    handshaked = true;
+                    var query = util.parseURI(event.data).query;
+                    // Assign a newly issued identifier for this transport
+                    self.id = query.id;
+                    self.fire("open");
+                } else {
+                    self.fire("message", event.data);
+                }
             };
             es.onerror = function() {
                 es.close();
                 // There is no way to find whether there was an error or not
-                socket.fire("close");
+                self.fire("close");
             };
         };
         self.abort = function() {
@@ -750,9 +801,10 @@
         return self;
     };
     // Streaming Base
-    transports.streambase = function(socket, options) {
+    transports.streambase = function(options) {
         var buffer = "";
-        var self = transports.httpbase(socket, options);
+        var self = transports.httpbase(options);
+        var handshaked;
         // The detail about parsing is explained in the reference implementation
         self.parse = function(chunk) {
             // Strips off the left padding of the chunk that appears in the
@@ -763,7 +815,16 @@
                 // String.prototype.split with string separator is reliable cross-browser
                 var lines = (buffer + chunk).split("\n\n");
                 for (var i = 0; i < lines.length - 1; i++) {
-                    socket.receive(lines[i].substring("data: ".length));
+                    var data = lines[i].substring("data: ".length);
+                    if (!handshaked) {
+                        handshaked = true;
+                        var query = util.parseURI(data).query;
+                        // Assign a newly issued identifier for this transport
+                        self.id = query.id;
+                        self.fire("open");
+                    } else {
+                        self.fire("message", data);
+                    }
                 }
                 buffer = lines[lines.length - 1];
             }
@@ -771,14 +832,13 @@
         return self;
     };
     // Streaming - XMLHttpRequest
-    transports.streamxhr = function(socket, options) {
+    transports.streamxhr = function(options) {
         if ((util.browser.msie && util.browser.vmajor < 10) || (options.crossOrigin && !util.corsable)) {
             return;
         }
-        
         var xhr;
-        var self = transports.streambase(socket, options);
-        self.open = function() {
+        var self = transports.streambase(options);
+        self.connect = function() {
             var index;
             xhr = util.xhr();
             xhr.onreadystatechange = function() {
@@ -787,9 +847,9 @@
                     index = xhr.responseText.length;
                 } else if (xhr.readyState === 4) {
                     if (xhr.status !== 200) {
-                        socket.fire("error", new Error());
+                        self.fire("error", new Error());
                     }
-                    socket.fire("close");
+                    self.fire("close");
                 }
             };
             xhr.open("GET", self.uri.open());
@@ -804,15 +864,14 @@
         return self;
     };
     // Streaming - XDomainRequest
-    transports.streamxdr = function(socket, options) {
+    transports.streamxdr = function(options) {
         var XDomainRequest = window.XDomainRequest;
         if (!XDomainRequest || !options.xdrURL) {
             return;
         }
-        
         var xdr;
-        var self = transports.streambase(socket, options);
-        self.open = function() {
+        var self = transports.streambase(options);
+        self.connect = function() {
             var index;
             xdr = new XDomainRequest();
             xdr.onprogress = function() {
@@ -820,12 +879,12 @@
                 index = xdr.responseText.length;
             };
             xdr.onerror = function() {
-                socket.fire("error", new Error()).fire("close");
+                self.fire("error", new Error()).fire("close");
             };
             xdr.onload = function() {
-                socket.fire("close");
+                self.fire("close");
             };
-            xdr.open("GET", options.xdrURL.call(socket, self.uri.open()));
+            xdr.open("GET", options.xdrURL.call(self, self.uri.open()));
             xdr.send();
         };
         self.abort = function() {
@@ -834,16 +893,15 @@
         return self;
     };
     // Streaming - Iframe
-    transports.streamiframe = function(socket, options) {
+    transports.streamiframe = function(options) {
         var ActiveXObject = window.ActiveXObject;
         if (!ActiveXObject || options.crossOrigin) {
             return;
         }
-        
         var doc;
         var stop;
-        var self = transports.streambase(socket, options);
-        self.open = function() {
+        var self = transports.streambase(options);
+        self.connect = function() {
             function iterate(fn) {
                 var timeoutId;
                 // Though the interval is 1ms for real-time application, there is a delay between setTimeout calls
@@ -876,10 +934,9 @@
                 var container = cdoc.body.lastChild;
                 // Detects connection failure
                 if (!container) {
-                    socket.fire("error", new Error()).fire("close");
+                    self.fire("error", new Error()).fire("close");
                     return false;
                 }
-                
                 function readDirty() {
                     var clone = container.cloneNode(true);
                     // Adds a character not CR and LF to circumvent an Internet Explorer bug
@@ -900,7 +957,7 @@
                         self.parse(text);
                     }
                     if (cdoc.readyState === "complete") {
-                        socket.fire("close");
+                        self.fire("close");
                         return false;
                     }
                 });
@@ -914,43 +971,42 @@
         return self;
     };
     // Long polling
-    transports.longpoll = function(socket, options) {
-        return transports.longpollajax(socket, options) || transports.longpollxdr(socket, options) || transports.longpolljsonp(socket, options);
+    transports.longpoll = function(options) {
+        return transports.longpollajax(options) || transports.longpollxdr(options) || transports.longpolljsonp(options);
     };
     // Long polling Base
-    transports.longpollbase = function(socket, options) {
-        var self = transports.httpbase(socket, options);
-        self.open = function() {
-            self.connect(self.uri.open(), function(data) {
-                // A regexp to parse message into [id, data]
-                var rdata = /(\d+)\|(.*)/;
-                var match = rdata.exec(data);
-                // To set the transport id before polling
-                socket.receive(match[2]);
+    transports.longpollbase = function(options) {
+        var self = transports.httpbase(options);
+        self.connect = function() {
+            self.poll(self.uri.open(), function(data) {
+                var query = util.parseURI(data).query;
+                // Assign a newly issued identifier for this transport
+                self.id = query.id;
                 (function poll(msgId) {
-                    self.connect(util.stringifyURI(options.url, {id: self.id, when: "poll", lastMsgId: msgId}), function(data) {
+                    self.poll(util.stringifyURI(options.url, {id: self.id, when: "poll", lastMsgId: msgId}), function(data) {
                         if (data) {
-                            var match = rdata.exec(data);
+                            // A regexp to parse message into [id, data]
+                            var match = /(\d+)\|(.*)/.exec(data);
                             poll(match[1]);
-                            socket.receive(match[2]);
+                            self.fire("message", match[2]);
                         } else {
-                            socket.fire("close");
+                            self.fire("close");
                         }
                     });
-                })(match[1]);
+                })();
+                self.fire("open");
             });
         };
         return self;
     };
     // Long polling - AJAX
-    transports.longpollajax = function(socket, options) {
+    transports.longpollajax = function(options) {
         if (options.crossOrigin && !util.corsable) {
             return;
         }
-        
         var xhr;
-        var self = transports.longpollbase(socket, options);
-        self.connect = function(url, fn) {
+        var self = transports.longpollbase(options);
+        self.poll = function(url, fn) {
             xhr = util.xhr();
             xhr.onreadystatechange = function() {
                 // Avoids c00c023f error on Internet Explorer 9
@@ -958,7 +1014,7 @@
                     if (xhr.status === 200) {
                         fn(xhr.responseText);
                     } else {
-                        socket.fire("error", new Error());
+                        self.fire("error", new Error());
                     }
                 }
             };
@@ -974,22 +1030,21 @@
         return self;
     };
     // Long polling - XDomainRequest
-    transports.longpollxdr = function(socket, options) {
+    transports.longpollxdr = function(options) {
         var XDomainRequest = window.XDomainRequest;
         if (!XDomainRequest || !options.xdrURL) {
             return;
         }
-        
         var xdr;
-        var self = transports.longpollbase(socket, options);
-        self.connect = function(url, fn) {
-            url = options.xdrURL.call(socket, url);
+        var self = transports.longpollbase(options);
+        self.poll = function(url, fn) {
+            url = options.xdrURL.call(self, url);
             xdr = new XDomainRequest();
             xdr.onload = function() {
                 fn(xdr.responseText);
             };
             xdr.onerror = function() {
-                socket.fire("error", new Error()).fire("close");
+                self.fire("error", new Error()).fire("close");
             };
             xdr.open("GET", url);
             xdr.send();
@@ -1001,15 +1056,15 @@
     };
     // Long polling - JSONP
     var jsonpCallbacks = [];
-    transports.longpolljsonp = function(socket, options) {
+    transports.longpolljsonp = function(options) {
         var script;
-        var self = transports.longpollbase(socket, options);
+        var self = transports.longpollbase(options);
         var callback = jsonpCallbacks.pop() || ("socket_" + (guid++));
         // Attaches callback
         window[callback] = function(data) {
             script.responseText = data;
         };
-        socket.once("close", function() {
+        self.on("close", function() {
             // Assings an empty function for browsers which are not able to cancel a request made from script tag
             window[callback] = function() {};
             jsonpCallbacks.push(callback);
@@ -1018,7 +1073,7 @@
         self.uri.open = function() {
             return uriOpen.apply(self, arguments) + "&jsonp=true&callback=" + callback;
         };
-        self.connect = function(url, fn) {
+        self.poll = function(url, fn) {
             script = document.createElement("script");
             script.async = true;
             script.src = url;
@@ -1039,7 +1094,7 @@
             };
             script.onerror = function() {
                 script.clean();
-                socket.fire("error", new Error()).fire("close");
+                self.fire("error", new Error()).fire("close");
             };
             head.insertBefore(script, head.firstChild);
         };
