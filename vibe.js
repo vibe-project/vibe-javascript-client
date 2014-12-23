@@ -1,5 +1,5 @@
 /*
- * Vibe v3.0.0-Alpha5
+ * Vibe v3.0.0-Alpha6
  * http://vibe-project.github.io/projects/vibe-javascript-client/
  * 
  * Copyright 2014 The Vibe Project 
