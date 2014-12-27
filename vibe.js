@@ -291,7 +291,6 @@
                 return 2 * (lastDelay || 250);
             },
             timeout: 3000,
-            transports: ["ws", "stream", "longpoll"],
             xdrURL: null
         };
         // Overrides defaults
@@ -372,14 +371,8 @@
             for (var type in events) {
                 events[type].unlock();
             }
-            if (options.transports.length) {
-                // Fires the connecting event and connects to the server
-                self.fire("connecting");
-            } else {
-                // There is no available transport
-                self.fire("error", new Error("notransport")).fire("close");
-            }
-            return this;
+            // Fires the connecting event and connects to the server
+            return self.fire("connecting");
         };
         // Disconnects the connection
         self.close = function() {
@@ -429,7 +422,7 @@
                 }
             }
             // Initializes transport
-            function initTransport(trans) {
+            function init(trans) {
                 transport = trans;
                 var skip;
                 transport.on("message", function(data) {
@@ -472,23 +465,23 @@
                     return;
                 }
                 // Deremines a transport name from URI
+                var name;
                 var scheme = /^([\w\+\.\-]+):/.exec(uri)[1];
                 switch (scheme) {
                 case "http":
                 case "https":
-                    options.transport = util.parseURI(uri).query.transport;
+                    name = util.parseURI(uri).query.transport;
                     break;
                 case "ws":
                 case "wss":
-                    options.transport = "ws";
+                    name = "ws";
                     break;
                 default:
                     self.fire("error", new Error("notsupporteduri")).fire("close");
                     return;
                 }
-                // Strictly speaking, the following values and options.transport
-                // are not option but assigns them to options for convenience of
-                // transport
+                // Strictly speaking, the following values are not option but
+                // assigns them to options for convenience of transport
                 options.url = uri;
                 // Origin parts
                 var parts = /^([\w\+\.\-]+:)(?:\/\/([^\/?#:]*)(?::(\d+))?)?/.exec(options.url.toLowerCase());
@@ -500,7 +493,7 @@
                     // port
                     (parts[3] || (parts[1] === "http:" ? 80 : 443)) != (location.port || (location.protocol === "http:" ? 80 : 443))
                 ));
-                trans = transports[options.transport](options);
+                trans = transports[name](options);
                 if (!trans) {
                     // It would be null if it can't run on this environment
                     open();
@@ -514,7 +507,7 @@
                         options._heartbeat = +query._heartbeat || 5000;
                         // Now that handshaking is completed, 
                         // removes event handler for finding working transport and initializes the transport 
-                        initTransport(trans.off("close", open));
+                        init(trans.off("close", open));
                         // And fires open event to socket
                         self.fire("open");
                     });
@@ -635,6 +628,7 @@
                 clearTimeout(timeoutTimer);
             }
             self.on("open", clearTimeoutTimer).on("close", clearTimeoutTimer);
+            return this;
         };
         // Transport events
         var events = {open: Callbacks(true), message: Callbacks(), error: Callbacks(), close: Callbacks(true)};
@@ -690,7 +684,7 @@
         var self = transports.base(options);
         self.uri = {
             open: function() {
-                return util.stringifyURI(options.url, {when: "open", transport: options.transport});
+                return util.stringifyURI(options.url, {when: "open"});
             },
             send: function() {
                 return util.stringifyURI(options.url, {id: self.id});
