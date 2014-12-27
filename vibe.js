@@ -46,6 +46,9 @@
     var head = document.head || document.getElementsByTagName("head")[0] || document.documentElement;
     // Most are inspired by jQuery
     var util = {};
+    util.isArray = Array.isArray || function(array) {
+        return toString.call(array) === "[object Array]";
+    };
     util.makeAbsolute = function(url) {
         var div = document.createElement("div");
         // Uses an innerHTML property to obtain an absolute URL
@@ -281,7 +284,7 @@
     }
     
     // Socket object
-    function Socket(url, options) {
+    function Socket(uris, options) {
         // Default options
         var defaults = {
             reconnect: function(lastDelay) {
@@ -298,20 +301,6 @@
             }
         }
         options = defaults;
-        
-        // Strictly speaking, the following values are not option
-        // but assigns them to options for convenience of transport
-        options.url = util.makeAbsolute(url);
-        // Origin parts
-        var parts = /^([\w\+\.\-]+:)(?:\/\/([^\/?#:]*)(?::(\d+))?)?/.exec(options.url.toLowerCase());
-        options.crossOrigin = !!(parts && (
-            // protocol
-            parts[1] != location.protocol ||
-            // hostname
-            parts[2] != location.hostname ||
-            // port
-            (parts[3] || (parts[1] === "http:" ? 80 : 443)) != (location.port || (location.protocol === "http:" ? 80 : 443))
-        ));
 
         // Socket
         var self = {};
@@ -428,6 +417,17 @@
         self.on("connecting", function() {
             // From preparing state
             state = "connecting";
+            // Final URIs to work with transport
+            var candidates = util.isArray(uris) ? slice.call(uris) : [uris];
+            for (var i = 0; i < candidates.length; i++) {
+                var uri = candidates[i] = util.makeAbsolute(candidates[i]);
+                if (/^http:|^https:/.test(uri) && !util.parseURI(uri).query.transport) {
+                    candidates.splice(i, 1, 
+                        util.stringifyURI(uri, {transport: "ws"}), 
+                        util.stringifyURI(uri, {transport: "stream"}), 
+                        util.stringifyURI(uri, {transport: "longpoll"}));
+                }
+            }
             // Initializes transport
             function initTransport(trans) {
                 transport = trans;
@@ -463,42 +463,69 @@
             }
             // A temporary transport to find working transport
             var trans;
-            var candidates = slice.call(options.transports);
             // Tries connection with next available transport
             function open() {
-                var type = candidates.shift();
+                var uri = candidates.shift();
                 // If every available transport failed
-                if (!type) {
+                if (!uri) {
                     self.fire("error", new Error()).fire("close");
                     return;
                 }
-                trans = transports[type](options);
-                // A transport instance will be null if it can't run on this environment
-                if (!trans) {
-                    open();
+                // Deremines a transport name from URI
+                var scheme = /^([\w\+\.\-]+):/.exec(uri)[1];
+                switch (scheme) {
+                case "http":
+                case "https":
+                    options.transport = util.parseURI(uri).query.transport;
+                    break;
+                case "ws":
+                case "wss":
+                    options.transport = "ws";
+                    break;
+                default:
+                    self.fire("error", new Error("notsupporteduri")).fire("close");
                     return;
                 }
-                // TODO find other way
-                options.transport = type;
-                trans.on("close", open).on("message", function handshaker(data) {
-                    trans.off("message", handshaker);
-                    var query = util.parseURI(data).query;
-                    // An heartbeat option can't be set by user
-                    options.heartbeat = +query.heartbeat;
-                    // To speed up heartbeat test
-                    options._heartbeat = +query._heartbeat || 5000;
-                    // Now that handshaking is completed, 
-                    // removes event handler for finding working transport, initializes the transport 
-                    initTransport(trans.off("close", open));
-                    // And fires open event to socket
-                    self.fire("open");
-                })
-                .open();
+                // Strictly speaking, the following values and options.transport
+                // are not option but assigns them to options for convenience of
+                // transport
+                options.url = uri;
+                // Origin parts
+                var parts = /^([\w\+\.\-]+:)(?:\/\/([^\/?#:]*)(?::(\d+))?)?/.exec(options.url.toLowerCase());
+                options.crossOrigin = !!(parts && (
+                    // protocol
+                    parts[1] != location.protocol ||
+                    // hostname
+                    parts[2] != location.hostname ||
+                    // port
+                    (parts[3] || (parts[1] === "http:" ? 80 : 443)) != (location.port || (location.protocol === "http:" ? 80 : 443))
+                ));
+                trans = transports[options.transport](options);
+                if (!trans) {
+                    // It would be null if it can't run on this environment
+                    open();
+                } else {
+                    trans.open().on("close", open).on("message", function handshaker(data) {
+                        trans.off("message", handshaker);
+                        var query = util.parseURI(data).query;
+                        // An heartbeat option can't be set by user
+                        options.heartbeat = +query.heartbeat;
+                        // To speed up heartbeat test
+                        options._heartbeat = +query._heartbeat || 5000;
+                        // Now that handshaking is completed, 
+                        // removes event handler for finding working transport and initializes the transport 
+                        initTransport(trans.off("close", open));
+                        // And fires open event to socket
+                        self.fire("open");
+                    });
+                }
             }
             // This is to stop the whole process to find a working transport 
             // when socket's close method is called while doing that
             function stop() {
-                trans.off("close", open).close();
+                if (trans) {
+                    trans.off("close", open).close();
+                }
             }
             self.once("close", stop).once("open", function() {
                 self.off("close", stop);
@@ -1109,10 +1136,10 @@
     var vibe = {};
     // Socket instances
     var sockets = [];
-    // Creates a new socket and connects to the given url
-    vibe.open = function(url, options) {
+    // Creates a new socket and connects to the given URI
+    vibe.open = function(uris, options) {
         // Opens a new socket
-        var socket = Socket(url, options);
+        var socket = Socket(uris, options);
         sockets.push(socket);
         return socket; 
     };

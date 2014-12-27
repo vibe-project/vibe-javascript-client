@@ -58,7 +58,7 @@ module.exports = function(grunt) {
             // Executed by the test runner
             case "/open":
                 res.end();
-                vibe.open(query.uri, {reconnect: false, transports: [query.transport]})
+                vibe.open(query.uri, {reconnect: false})
                 .on("abort", function() {
                     this.close();
                 })

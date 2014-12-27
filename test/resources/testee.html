@@ -56,8 +56,7 @@
                     reconnect: false, 
                     xdrURL: function(url) {
                         return url;
-                    },
-                    transports: [options.transport]
+                    }
                 })
                 .on("abort", function() {
                     this.close();
