@@ -581,6 +581,7 @@
         self.send = function(type, data, onResolved, onRejected) {
             if (state !== "opened") {
                 self.fire(new Error("notopened"));
+                return;
             }
             
             // Outbound event
