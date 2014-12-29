@@ -212,6 +212,18 @@
         }
         return browser;
     })();
+    util.crossOrigin = function(uri) {
+        // Origin parts
+        var parts = /^([\w\+\.\-]+:)(?:\/\/([^\/?#:]*)(?::(\d+))?)?/.exec(uri.toLowerCase());
+        return !!(parts && (
+            // protocol
+            parts[1] != location.protocol ||
+            // hostname
+            parts[2] != location.hostname ||
+            // port
+            (parts[3] || (parts[1] === "http:" ? 80 : 443)) != (location.port || (location.protocol === "http:" ? 80 : 443))
+        ));
+    };
     
     // Callbacks object
     // inspired by jQuery.Callbacks
@@ -287,9 +299,11 @@
     function Socket(uris, options) {
         // Default options
         var defaults = {
+            // For socket
             reconnect: function(lastDelay) {
                 return 2 * (lastDelay || 250);
             },
+            // For transport
             timeout: 3000,
             xdrURL: null
         };
@@ -415,49 +429,16 @@
             for (var i = 0; i < candidates.length; i++) {
                 var uri = candidates[i] = util.makeAbsolute(candidates[i]);
                 if (/^http:|^https:/.test(uri) && !util.parseURI(uri).query.transport) {
-                    candidates.splice(i, 1, 
+                    candidates.splice(i, 1,
+                        // Usually util.stringifyURI is not used when query is constant
+                        // it's used here for convenience since we need to know if uri has already query
                         util.stringifyURI(uri, {transport: "ws"}), 
                         util.stringifyURI(uri, {transport: "stream"}), 
                         util.stringifyURI(uri, {transport: "longpoll"}));
                 }
             }
-            // Initializes transport
-            function init(trans) {
-                transport = trans;
-                var skip;
-                transport.on("message", function(data) {
-                    // Because this handler is executed on dispatching message event, 
-                    // first message for handshaking should be skipped
-                    if (!skip) {
-                        skip = true;
-                        return;
-                    }
-                    // Inbound event
-                    var event = util.parseJSON(data); 
-                    var latch;
-                    var reply = function(success) {
-                        return function(value) {
-                            // The latch prevents double reply.
-                            if (!latch) {
-                                latch = true;
-                                self.send("reply", {id: event.id, data: value, exception: !success});
-                            }
-                        };
-                    };
-                    var args = [event.type, event.data, !event.reply ? null : {resolve: reply(true), reject: reply(false)}];
-                    self.fire.apply(self, args);
-                })
-                .on("error", function(error) {
-                    self.fire("error", error);
-                })
-                .on("close", function() {
-                    self.fire("close");
-                });
-            }
-            // A temporary transport to find working transport
-            var trans;
-            // Tries connection with next available transport
-            function open() {
+            // Starts a process to find a working transport
+            (function open() {
                 var uri = candidates.shift();
                 // If every available transport failed
                 if (!uri) {
@@ -476,55 +457,63 @@
                 case "wss":
                     name = "ws";
                     break;
-                default:
-                    self.fire("error", new Error("notsupporteduri")).fire("close");
+                }
+                // Passes SocketOptions extending TransportOptions
+                var trans = transports[name](uri, options);
+                // It would be null if it can't run on this environment
+                if (!trans) {
+                    open();
                     return;
                 }
-                // Strictly speaking, the following values are not option but
-                // assigns them to options for convenience of transport
-                options.url = uri;
-                // Origin parts
-                var parts = /^([\w\+\.\-]+:)(?:\/\/([^\/?#:]*)(?::(\d+))?)?/.exec(options.url.toLowerCase());
-                options.crossOrigin = !!(parts && (
-                    // protocol
-                    parts[1] != location.protocol ||
-                    // hostname
-                    parts[2] != location.hostname ||
-                    // port
-                    (parts[3] || (parts[1] === "http:" ? 80 : 443)) != (location.port || (location.protocol === "http:" ? 80 : 443))
-                ));
-                trans = transports[name](options);
-                if (!trans) {
-                    // It would be null if it can't run on this environment
-                    open();
-                } else {
-                    trans.open().on("close", open).on("message", function handshaker(data) {
-                        trans.off("message", handshaker);
-                        var query = util.parseURI(data).query;
-                        // An heartbeat option can't be set by user
-                        options.heartbeat = +query.heartbeat;
-                        // To speed up heartbeat test
-                        options._heartbeat = +query._heartbeat || 5000;
-                        // Now that handshaking is completed, 
-                        // removes event handler for finding working transport and initializes the transport 
-                        init(trans.off("close", open));
-                        // And fires open event to socket
-                        self.fire("open");
-                    });
-                }
-            }
-            // This is to stop the whole process to find a working transport 
-            // when socket's close method is called while doing that
-            function stop() {
-                if (trans) {
+                // This is to stop the whole process to find a working transport 
+                // when socket's close method is called while doing that
+                function stop() {
                     trans.off("close", open).close();
                 }
-            }
-            self.once("close", stop).once("open", function() {
-                self.off("close", stop);
-            });
-            // Starts a process to find a working transport
-            open();
+                self.once("close", stop);
+                trans.open().on("close", open).on("text", function handshaker(data) {
+                    // handshaker is one-time event handler
+                    trans.off("text", handshaker);
+                    var query = util.parseURI(data).query;
+                    // An heartbeat option can't be set by user
+                    options.heartbeat = +query.heartbeat;
+                    // To speed up heartbeat test
+                    options._heartbeat = +query._heartbeat || 5000;
+                    // Now that handshaking is completed, associates the transport with the socket
+                    transport = trans.off("close", open);
+                    var skip;
+                    transport.on("text", function(data) {
+                        // Because this handler is executed on dispatching text event, 
+                        // first message for handshaking should be skipped
+                        if (!skip) {
+                            skip = true;
+                            return;
+                        }
+                        // Inbound event
+                        var event = util.parseJSON(data); 
+                        var latch;
+                        var reply = function(success) {
+                            return function(value) {
+                                // The latch prevents double reply.
+                                if (!latch) {
+                                    latch = true;
+                                    self.send("reply", {id: event.id, data: value, exception: !success});
+                                }
+                            };
+                        };
+                        var args = [event.type, event.data, !event.reply ? null : {resolve: reply(true), reject: reply(false)}];
+                        self.fire.apply(self, args);
+                    })
+                    .on("error", function(error) {
+                        self.fire("error", error);
+                    })
+                    .on("close", function() {
+                        self.fire("close");
+                    });
+                    // And fires open event to socket
+                    self.off("close", stop).fire("open");
+                });
+            })();
         })
         .on("open", function() {
             // From connecting state
@@ -615,7 +604,7 @@
     // A group of transport object
     var transports = {};
     // Base
-    transports.base = function(options) {
+    transports.base = function(uri, options) {
         var self = {};
         self.open = function() {
             // Establishes a real connection
@@ -631,7 +620,7 @@
             return this;
         };
         // Transport events
-        var events = {open: Callbacks(true), message: Callbacks(), error: Callbacks(), close: Callbacks(true)};
+        var events = {open: Callbacks(true), text: Callbacks(), error: Callbacks(), close: Callbacks(true)};
         self.on = function(type, fn) {
             events[type].add(fn);
             return this;
@@ -647,22 +636,22 @@
         return self;
     };
     // WebSocket
-    transports.ws = function(options) {
+    transports.ws = function(uri, options) {
         var WebSocket = window.WebSocket;
         if (!WebSocket) {
             return;
         }
         var ws;
-        var self = transports.base(options);
+        var self = transports.base(uri, options);
         self.connect = function() {
-            // Changes options.url's protocol part to ws or wss
-            // options.url is absolute path
-            ws = new WebSocket(options.url.replace(/^http/, "ws"));
+            ws = new WebSocket(uri.replace(/^http/, "ws"));
             ws.onopen = function() {
                 self.fire("open");
             };
             ws.onmessage = function(event) {
-                self.fire("message", event.data);
+                if (typeof event.data === "string") {
+                    self.fire("text", event.data);
+                }
             };
             ws.onerror = function() {
                 self.fire("error", new Error()).fire("close");
@@ -680,30 +669,23 @@
         return self;
     };
     // HTTP Base
-    transports.httpbase = function(options) {
-        var self = transports.base(options);
-        self.uri = {
-            open: function() {
-                return util.stringifyURI(options.url, {when: "open"});
-            },
-            send: function() {
-                return util.stringifyURI(options.url, {id: self.id});
-            }
-        };
-        var opened;
+    transports.httpbase = function(uri, options) {
+        var self = transports.base(uri, options);
+        // Because id is set on open event
+        var sendURI;
         self.on("open", function() {
-            opened = true;
+            sendURI = util.stringifyURI(uri, {id: self.id});
         })
         .on("close", function() {
-            opened = false;
+            sendURI = null;
         });
         // Try again as long as the transport is opened
         function retry(data) {
-            if (opened) {
+            if (sendURI) {
                 self.send(data);
             }
         }
-        self.send = !options.crossOrigin || util.corsable ?
+        self.send = !util.crossOrigin(uri) || util.corsable ?
         // By XMLHttpRequest
         function(data) {
             var xhr = util.xhr();
@@ -712,7 +694,7 @@
                     retry(data);
                 }
             };
-            xhr.open("POST", self.uri.send());
+            xhr.open("POST", sendURI);
             xhr.setRequestHeader("content-type", "text/plain; charset=UTF-8");
             if (util.corsable) {
                 xhr.withCredentials = true;
@@ -727,7 +709,7 @@
             xdr.onerror = function() {
                 retry(data);
             };
-            xdr.open("POST", options.xdrURL.call(self, self.uri.send()));
+            xdr.open("POST", options.xdrURL.call(self, sendURI));
             xdr.send("data=" + data);
         } :
         // By HTMLFormElement
@@ -735,7 +717,7 @@
             var iframe;
             var textarea;
             var form = document.createElement("form");
-            form.action = self.uri.send();
+            form.action = sendURI;
             form.target = "socket-" + (guid++);
             form.method = "POST";
             // Internet Explorer 6 needs encoding property
@@ -766,7 +748,7 @@
                 // this request is supposed to run in unloading event so script tag should be used
                 var script = document.createElement("script");
                 script.async = false;
-                script.src = util.stringifyURI(options.url, {id: self.id, when: "abort"});
+                script.src = util.stringifyURI(uri, {id: self.id, when: "abort"});
                 script.onload = script.onerror = script.onreadystatechange = function() {
                     if (!script.readyState || /loaded|complete/.test(script.readyState)) {
                         script.onload = script.onreadystatechange = null;
@@ -783,19 +765,19 @@
         return self;
     };
     // Streaming
-    transports.stream = function(options) {
-        return transports.sse(options) || transports.streamxhr(options) || transports.streamxdr(options) || transports.streamiframe(options);
+    transports.stream = function(uri, options) {
+        return transports.sse(uri, options) || transports.streamxhr(uri, options) || transports.streamxdr(uri, options) || transports.streamiframe(uri, options);
     };
     // Streaming - Server-Sent Events
-    transports.sse = function(options) {
+    transports.sse = function(uri, options) {
         var EventSource = window.EventSource;
-        if (!EventSource || (options.crossOrigin && util.browser.safari && util.browser.vmajor < 7)) {
+        if (!EventSource || (util.crossOrigin(uri) && util.browser.safari && util.browser.vmajor < 7)) {
             return;
         }
         var es;
-        var self = transports.httpbase(options);
+        var self = transports.httpbase(uri, options);
         self.connect = function() {
-            es = new EventSource(self.uri.open() + "&sse=true", {withCredentials: true});
+            es = new EventSource(uri + "&when=open&sse=true", {withCredentials: true});
             var handshaked;
             es.onmessage = function(event) {
                 // The first message is handshake result
@@ -806,7 +788,7 @@
                     self.id = query.id;
                     self.fire("open");
                 } else {
-                    self.fire("message", event.data);
+                    self.fire("text", event.data);
                 }
             };
             es.onerror = function() {
@@ -821,9 +803,9 @@
         return self;
     };
     // Streaming Base
-    transports.streambase = function(options) {
+    transports.streambase = function(uri, options) {
         var buffer = "";
-        var self = transports.httpbase(options);
+        var self = transports.httpbase(uri, options);
         var handshaked;
         // The detail about parsing is explained in the reference implementation
         self.parse = function(chunk) {
@@ -843,7 +825,7 @@
                         self.id = query.id;
                         self.fire("open");
                     } else {
-                        self.fire("message", data);
+                        self.fire("text", data);
                     }
                 }
                 buffer = lines[lines.length - 1];
@@ -852,12 +834,12 @@
         return self;
     };
     // Streaming - XMLHttpRequest
-    transports.streamxhr = function(options) {
-        if ((util.browser.msie && util.browser.vmajor < 10) || (options.crossOrigin && !util.corsable)) {
+    transports.streamxhr = function(uri, options) {
+        if ((util.browser.msie && util.browser.vmajor < 10) || (util.crossOrigin(uri) && !util.corsable)) {
             return;
         }
         var xhr;
-        var self = transports.streambase(options);
+        var self = transports.streambase(uri, options);
         self.connect = function() {
             var index;
             xhr = util.xhr();
@@ -872,7 +854,7 @@
                     self.fire("close");
                 }
             };
-            xhr.open("GET", self.uri.open());
+            xhr.open("GET", uri + "&when=open");
             if (util.corsable) {
                 xhr.withCredentials = true;
             }
@@ -884,13 +866,13 @@
         return self;
     };
     // Streaming - XDomainRequest
-    transports.streamxdr = function(options) {
+    transports.streamxdr = function(uri, options) {
         var XDomainRequest = window.XDomainRequest;
         if (!XDomainRequest || !options.xdrURL) {
             return;
         }
         var xdr;
-        var self = transports.streambase(options);
+        var self = transports.streambase(uri, options);
         self.connect = function() {
             var index;
             xdr = new XDomainRequest();
@@ -904,7 +886,7 @@
             xdr.onload = function() {
                 self.fire("close");
             };
-            xdr.open("GET", options.xdrURL.call(self, self.uri.open()));
+            xdr.open("GET", options.xdrURL.call(self, uri + "&when=open"));
             xdr.send();
         };
         self.abort = function() {
@@ -913,14 +895,14 @@
         return self;
     };
     // Streaming - Iframe
-    transports.streamiframe = function(options) {
+    transports.streamiframe = function(uri, options) {
         var ActiveXObject = window.ActiveXObject;
-        if (!ActiveXObject || options.crossOrigin) {
+        if (!ActiveXObject || util.crossOrigin(uri)) {
             return;
         }
         var doc;
         var stop;
-        var self = transports.streambase(options);
+        var self = transports.streambase(uri, options);
         self.connect = function() {
             function iterate(fn) {
                 var timeoutId;
@@ -942,7 +924,7 @@
             doc.open();
             doc.close();
             var iframe = doc.createElement("iframe");
-            iframe.src = self.uri.open();
+            iframe.src = uri + "&when=open";
             doc.body.appendChild(iframe);
             var cdoc = iframe.contentDocument || iframe.contentWindow.document;
             stop = iterate(function() {
@@ -991,24 +973,24 @@
         return self;
     };
     // Long polling
-    transports.longpoll = function(options) {
-        return transports.longpollajax(options) || transports.longpollxdr(options) || transports.longpolljsonp(options);
+    transports.longpoll = function(uri, options) {
+        return transports.longpollajax(uri, options) || transports.longpollxdr(uri, options) || transports.longpolljsonp(uri, options);
     };
     // Long polling Base
-    transports.longpollbase = function(options) {
-        var self = transports.httpbase(options);
+    transports.longpollbase = function(uri, options) {
+        var self = transports.httpbase(uri, options);
         self.connect = function() {
-            self.poll(self.uri.open(), function(data) {
+            self.poll(uri + "&when=open", function(data) {
                 var query = util.parseURI(data).query;
                 // Assign a newly issued identifier for this transport
                 self.id = query.id;
                 (function poll(msgId) {
-                    self.poll(util.stringifyURI(options.url, {id: self.id, when: "poll", lastMsgId: msgId}), function(data) {
+                    self.poll(util.stringifyURI(uri, {id: self.id, when: "poll", lastMsgId: msgId}), function(data) {
                         if (data) {
                             // A regexp to parse message into [id, data]
                             var match = /(\d+)\|(.*)/.exec(data);
                             poll(match[1]);
-                            self.fire("message", match[2]);
+                            self.fire("text", match[2]);
                         } else {
                             self.fire("close");
                         }
@@ -1020,12 +1002,12 @@
         return self;
     };
     // Long polling - AJAX
-    transports.longpollajax = function(options) {
-        if (options.crossOrigin && !util.corsable) {
+    transports.longpollajax = function(uri, options) {
+        if (util.crossOrigin(uri) && !util.corsable) {
             return;
         }
         var xhr;
-        var self = transports.longpollbase(options);
+        var self = transports.longpollbase(uri, options);
         self.poll = function(url, fn) {
             xhr = util.xhr();
             xhr.onreadystatechange = function() {
@@ -1050,13 +1032,13 @@
         return self;
     };
     // Long polling - XDomainRequest
-    transports.longpollxdr = function(options) {
+    transports.longpollxdr = function(uri, options) {
         var XDomainRequest = window.XDomainRequest;
         if (!XDomainRequest || !options.xdrURL) {
             return;
         }
         var xdr;
-        var self = transports.longpollbase(options);
+        var self = transports.longpollbase(uri, options);
         self.poll = function(url, fn) {
             url = options.xdrURL.call(self, url);
             xdr = new XDomainRequest();
@@ -1076,9 +1058,9 @@
     };
     // Long polling - JSONP
     var jsonpCallbacks = [];
-    transports.longpolljsonp = function(options) {
+    transports.longpolljsonp = function(uri, options) {
         var script;
-        var self = transports.longpollbase(options);
+        var self = transports.longpollbase(uri, options);
         var callback = jsonpCallbacks.pop() || ("socket_" + (guid++));
         // Attaches callback
         window[callback] = function(data) {
@@ -1089,14 +1071,11 @@
             window[callback] = function() {};
             jsonpCallbacks.push(callback);
         });
-        var uriOpen = self.uri.open;
-        self.uri.open = function() {
-            return uriOpen.apply(self, arguments) + "&jsonp=true&callback=" + callback;
-        };
         self.poll = function(url, fn) {
             script = document.createElement("script");
             script.async = true;
-            script.src = url;
+            // In fact, jsonp and callback params are only for first request
+            script.src = util.stringifyURI(url, {jsonp: "true", callback: callback});
             script.clean = function() {
                 // Assigns null to attributes to avoid memory leak in IE
                 script.clean = script.onerror = script.onload = script.onreadystatechange = script.responseText = null;
