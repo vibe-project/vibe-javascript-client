@@ -170,7 +170,8 @@ module.exports = function(grunt) {
             process.argv.splice(process.argv.indexOf("--vibe.session"), 6);
             var runDomain = domain.create();
             runDomain.run(function() {
-                var runner = mocha.run();
+                // An empty function is needed as of Mocha 2.1.0
+                var runner = mocha.run(function() {});
                 runDomain.on("error", runner.uncaught.bind(runner));
                 // For integration with Sauce
                 // https://github.com/axemclion/grunt-saucelabs#test-result-details-with-mocha
