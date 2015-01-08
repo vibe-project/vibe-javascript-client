@@ -985,13 +985,11 @@
                 var query = util.parseURI(data).query;
                 // Assign a newly issued identifier for this transport
                 self.id = query.id;
-                (function poll(msgId) {
-                    self.poll(util.stringifyURI(uri, {id: self.id, when: "poll", lastMsgId: msgId}), function(data) {
+                (function poll() {
+                    self.poll(util.stringifyURI(uri, {id: self.id, when: "poll"}), function(data) {
                         if (data) {
-                            // A regexp to parse message into [id, data]
-                            var match = /(\d+)\|(.*)/.exec(data);
-                            poll(match[1]);
-                            self.fire("text", match[2]);
+                            poll();
+                            self.fire("text", data);
                         } else {
                             self.fire("close");
                         }
