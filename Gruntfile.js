@@ -105,10 +105,10 @@ module.exports = function(grunt) {
             delete require.cache[require.resolve("./node_modules/vibe-protocol/test/client.js")];
             mocha.addFile("./node_modules/vibe-protocol/test/client.js");
             // Set options through process.argv
-            process.argv.push("--vibe.transports", "ws,stream,longpoll", "--vibe.extension", "reply");
+            process.argv.push("--vibe.transports", "ws,stream,longpoll");
             mocha.loadFiles();
             // Undo the changes
-            process.argv.splice(process.argv.indexOf("--vibe.transports"), 4);
+            process.argv.splice(process.argv.indexOf("--vibe.transports"), 2);
             var runDomain = domain.create();
             runDomain.run(function() {
                 var runner = mocha.run(function(failures) {
@@ -164,10 +164,10 @@ module.exports = function(grunt) {
             delete require.cache[require.resolve("./node_modules/vibe-protocol/test/client.js")];
             mocha.addFile("./node_modules/vibe-protocol/test/client.js");
             // Set options through process.argv
-            process.argv.push("--vibe.session", session.id, "--vibe.transports", query.transports, "--vibe.extension", "reply");
+            process.argv.push("--vibe.session", session.id, "--vibe.transports", query.transports);
             mocha.loadFiles();
             // Undo the changes
-            process.argv.splice(process.argv.indexOf("--vibe.session"), 6);
+            process.argv.splice(process.argv.indexOf("--vibe.session"), 4);
             var runDomain = domain.create();
             runDomain.run(function() {
                 // An empty function is needed as of Mocha 2.1.0
