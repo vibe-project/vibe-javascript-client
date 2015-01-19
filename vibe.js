@@ -430,9 +430,9 @@
                 var uri = candidates[i] = util.makeAbsolute(candidates[i]);
                 if (/^http:|^https:/.test(uri) && !util.parseURI(uri).query.transport) {
                     candidates.splice(i, 1,
+                        uri.replace(/^http/, "ws"), 
                         // Usually util.stringifyURI is not used when query is constant
                         // it's used here for convenience since we need to know if uri has already query
-                        util.stringifyURI(uri, {transport: "ws"}), 
                         util.stringifyURI(uri, {transport: "stream"}), 
                         util.stringifyURI(uri, {transport: "longpoll"}));
                 }
@@ -645,7 +645,7 @@
         var ws;
         var self = transports.base(uri, options);
         self.connect = function() {
-            ws = new WebSocket(uri.replace(/^http/, "ws"));
+            ws = new WebSocket(uri);
             ws.onopen = function() {
                 self.fire("open");
             };
