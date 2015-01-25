@@ -128,16 +128,16 @@
             if (window.EventSource &&
                 // Safari 5-6 don't allow cross-origin sse
                 (!browser.safari || browser.vmajor >= 7)) {
-                transports.push("stream"); // sse
+                transports.push("httpstream"); // sse
             } else if (window.XDomainRequest) {
-                transports.push("stream"); // streamxdr
+                transports.push("httpstream"); // streamxdr
             } else if (vibe.util.corsable && 
                 // IE 6-9 and Opera 12 can't detect changes in response body
                 (!browser.msie || browser.vmajor >= 10) && 
                 (!browser.opera || browser.vmajor >= 13)) {
-                transports.push("stream"); // streamxhr
+                transports.push("httpstream"); // streamxhr
             }
-            transports.push("longpoll");
+            transports.push("httplongpoll");
             var script = document.createElement("script");
             script.async = true;
             script.src = "/begin?transports=" + encodeURIComponent(transports.join(","));
