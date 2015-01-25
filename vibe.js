@@ -65,13 +65,6 @@
             elem.attachEvent("on" + type, fn);
         }
     };
-    util.off = function(elem, type, fn) {
-        if (elem.removeEventListener) {
-            elem.removeEventListener(type, fn, false);
-        } else if (elem.detachEvent) {
-            elem.detachEvent("on" + type, fn);
-        }
-    };
     util.stringifyURI = function(url, params) {
         var name;
         var s = [];
