@@ -44,6 +44,7 @@
     var navigator = window.navigator;
     // Shortcut to find head tag
     var head = document.head || document.getElementsByTagName("head")[0] || document.documentElement;
+
     // Most are inspired by jQuery
     var util = {};
     util.isArray = Array.isArray || function(array) {
@@ -98,7 +99,7 @@
         }
         return obj;
     };
-    util.xhr = function() {
+    util.createXMLHttpRequest = function() {
         try {
             return new window.XMLHttpRequest();
         } catch (e1) {
@@ -185,7 +186,7 @@
         })("", {"": value});
     };
     // CORS able
-    util.corsable = "withCredentials" in util.xhr();
+    util.corsable = "withCredentials" in util.createXMLHttpRequest();
     // Browser sniffing
     util.browser = (function() {
         var ua = navigator.userAgent.toLowerCase();
@@ -225,9 +226,8 @@
         ));
     };
     
-    // Callbacks object
-    // inspired by jQuery.Callbacks
-    function Callbacks(deferred) {
+    // Inspired by jQuery.Callbacks
+    function createCallbacks(deferred) {
         var locked;
         var memory;
         var firing;
@@ -296,13 +296,14 @@
     }
     
     // Socket object
-    function Socket(uris, options) {
+    function createSocket(uris, options) {
         // Default options
         var defaults = {
             // For socket
             reconnect: function(lastDelay) {
                 return 2 * (lastDelay || 250);
             },
+            transports: [createWebSocketTransport, createHttpStreamTransport, createHttpLongpollTransport],
             // For transport
             timeout: 3000,
             xdrURL: null
@@ -328,7 +329,7 @@
                 if (events.message.locked()) {
                     return this;
                 }
-                event = events[type] = Callbacks();
+                event = events[type] = createCallbacks();
                 event.order = events.message.order;
             }
             event.add(fn);
@@ -411,13 +412,13 @@
         // they are considered as special event and works in a different way
         for (var i in {connecting: 1, open: 1, close: 1, waiting: 1}) {
             // This event fires only one time and handlers being added after fire are fired immediately
-            events[i] = Callbacks(true);
+            events[i] = createCallbacks(true);
             // State transition order
             events[i].order = guid++;
         }
         // However all the other event including message event work as you expected
         // it fires many times and handlers are executed whenever it fires
-        events.message = Callbacks(false);
+        events.message = createCallbacks(false);
         // It shares the same order with the open event because it can be fired when a socket is in the opened state
         events.message.order = events.open.order;
         // State transition
@@ -428,7 +429,7 @@
             var candidates = util.isArray(uris) ? slice.call(uris) : [uris];
             for (var i = 0; i < candidates.length; i++) {
                 var uri = candidates[i] = util.makeAbsolute(candidates[i]);
-                if (/^http:|^https:/.test(uri) && !util.parseURI(uri).query.transport) {
+                if (/^https?:/.test(uri) && !util.parseURI(uri).query.transport) {
                     candidates.splice(i, 1,
                         uri.replace(/^http/, "ws"), 
                         // Usually util.stringifyURI is not used when query is constant
@@ -445,21 +446,14 @@
                     self.fire("error", new Error()).fire("close");
                     return;
                 }
-                // Deremines a transport name from URI
-                var name;
-                var scheme = /^([\w\+\.\-]+):/.exec(uri)[1];
-                switch (scheme) {
-                case "http":
-                case "https":
-                    name = util.parseURI(uri).query.transport;
-                    break;
-                case "ws":
-                case "wss":
-                    name = "ws";
-                    break;
+                // Deremines a transport from URI through transports option
+                var trans;
+                for (var i = 0; i < options.transports.length; i++) {
+                    trans = options.transports[i](uri, options);
+                    if (trans) {
+                        break;
+                    }
                 }
-                // Passes SocketOptions extending TransportOptions
-                var trans = transports[name](uri, options);
                 // It would be null if it can't run on this environment
                 if (!trans) {
                     open();
@@ -602,10 +596,7 @@
         return self.open();
     }
 
-    // A group of transport object
-    var transports = {};
-    // Base
-    transports.base = function(uri, options) {
+    function createBaseTransport(uri, options) {
         var self = {};
         self.open = function() {
             // Establishes a real connection
@@ -621,7 +612,7 @@
             return this;
         };
         // Transport events
-        var events = {open: Callbacks(true), text: Callbacks(), error: Callbacks(), close: Callbacks(true)};
+        var events = {open: createCallbacks(true), text: createCallbacks(), error: createCallbacks(), close: createCallbacks(true)};
         self.on = function(type, fn) {
             events[type].add(fn);
             return this;
@@ -635,15 +626,15 @@
             return this;
         };
         return self;
-    };
-    // WebSocket
-    transports.ws = function(uri, options) {
+    }
+
+    function createWebSocketTransport(uri, options) {
         var WebSocket = window.WebSocket;
-        if (!WebSocket) {
+        if (!WebSocket || !/^wss?:/.test(uri)) {
             return;
         }
         var ws;
-        var self = transports.base(uri, options);
+        var self = createBaseTransport(uri, options);
         self.connect = function() {
             ws = new WebSocket(uri);
             ws.onopen = function() {
@@ -668,10 +659,10 @@
             ws.close();
         };
         return self;
-    };
-    // HTTP Base
-    transports.httpbase = function(uri, options) {
-        var self = transports.base(uri, options);
+    }
+
+    function createHttpBaseTransport(uri, options) {
+        var self = createBaseTransport(uri, options);
         // Because id is set on open event
         var sendURI;
         self.on("open", function() {
@@ -689,7 +680,7 @@
         self.send = !util.crossOrigin(uri) || util.corsable ?
         // By XMLHttpRequest
         function(data) {
-            var xhr = util.xhr();
+            var xhr = util.createXMLHttpRequest();
             xhr.onreadystatechange = function() {
                 if (xhr.readyState === 4 && xhr.status !== 200) {
                     retry(data);
@@ -746,7 +737,7 @@
             if (!latch) {
                 latch = true;
                 // Sends the abort request to the server
-                // this request is supposed to run in unloading event so script tag should be used
+                // this request is supposed to work even in unloading event so script tag should be used
                 var script = document.createElement("script");
                 script.async = false;
                 script.src = util.stringifyURI(uri, {id: self.id, when: "abort"});
@@ -764,19 +755,21 @@
             }
         };
         return self;
-    };
-    // Streaming
-    transports.stream = function(uri, options) {
-        return transports.sse(uri, options) || transports.streamxhr(uri, options) || transports.streamxdr(uri, options) || transports.streamiframe(uri, options);
-    };
-    // Streaming - Server-Sent Events
-    transports.sse = function(uri, options) {
+    }
+
+    function createHttpStreamTransport(uri, options) {
+        if (/^https?:/.test(uri) && util.parseURI(uri).query.transport === "stream") {
+            return createHttpSseTransport(uri, options) || createHttpStreamXhrTransport(uri, options) || createHttpStreamXdrTransport(uri, options) || createHttpStreamIframeTransport(uri, options);
+        }
+    }
+
+    function createHttpSseTransport(uri, options) {
         var EventSource = window.EventSource;
         if (!EventSource || (util.crossOrigin(uri) && util.browser.safari && util.browser.vmajor < 7)) {
             return;
         }
         var es;
-        var self = transports.httpbase(uri, options);
+        var self = createHttpBaseTransport(uri, options);
         self.connect = function() {
             es = new EventSource(uri + "&when=open&sse=true", {withCredentials: true});
             var handshaked;
@@ -802,11 +795,11 @@
             es.close();
         };
         return self;
-    };
-    // Streaming Base
-    transports.streambase = function(uri, options) {
+    }
+
+    function createHttpStreamBaseTransport(uri, options) {
         var buffer = "";
-        var self = transports.httpbase(uri, options);
+        var self = createHttpBaseTransport(uri, options);
         var handshaked;
         // The detail about parsing is explained in the reference implementation
         self.parse = function(chunk) {
@@ -833,17 +826,17 @@
             }
         };
         return self;
-    };
-    // Streaming - XMLHttpRequest
-    transports.streamxhr = function(uri, options) {
+    }
+
+    function createHttpStreamXhrTransport(uri, options) {
         if ((util.browser.msie && util.browser.vmajor < 10) || (util.crossOrigin(uri) && !util.corsable)) {
             return;
         }
         var xhr;
-        var self = transports.streambase(uri, options);
+        var self = createHttpStreamBaseTransport(uri, options);
         self.connect = function() {
             var index;
-            xhr = util.xhr();
+            xhr = util.createXMLHttpRequest();
             xhr.onreadystatechange = function() {
                 if (xhr.readyState === 3 && xhr.status === 200) {
                     self.parse(!index ? xhr.responseText : xhr.responseText.substring(index));
@@ -865,15 +858,15 @@
             xhr.abort();
         };
         return self;
-    };
-    // Streaming - XDomainRequest
-    transports.streamxdr = function(uri, options) {
+    }
+
+    function createHttpStreamXdrTransport(uri, options) {
         var XDomainRequest = window.XDomainRequest;
         if (!XDomainRequest || !options.xdrURL) {
             return;
         }
         var xdr;
-        var self = transports.streambase(uri, options);
+        var self = createHttpStreamBaseTransport(uri, options);
         self.connect = function() {
             var index;
             xdr = new XDomainRequest();
@@ -894,16 +887,16 @@
             xdr.abort();
         };
         return self;
-    };
-    // Streaming - Iframe
-    transports.streamiframe = function(uri, options) {
+    }
+
+    function createHttpStreamIframeTransport(uri, options) {
         var ActiveXObject = window.ActiveXObject;
         if (!ActiveXObject || util.crossOrigin(uri)) {
             return;
         }
         var doc;
         var stop;
-        var self = transports.streambase(uri, options);
+        var self = createHttpStreamBaseTransport(uri, options);
         self.connect = function() {
             function iterate(fn) {
                 var timeoutId;
@@ -972,14 +965,16 @@
             doc.execCommand("Stop");
         };
         return self;
-    };
-    // Long polling
-    transports.longpoll = function(uri, options) {
-        return transports.longpollajax(uri, options) || transports.longpollxdr(uri, options) || transports.longpolljsonp(uri, options);
-    };
-    // Long polling Base
-    transports.longpollbase = function(uri, options) {
-        var self = transports.httpbase(uri, options);
+    }
+
+    function createHttpLongpollTransport(uri, options) {
+        if (/^https?:/.test(uri) && util.parseURI(uri).query.transport === "longpoll") {
+            return createHttpLongpollAjaxTransport(uri, options) || createHttpLongpollXdrTransport(uri, options) || createHttpLongpollJsonpTransport(uri, options);
+        }
+    }
+
+    function createHttpLongpollBaseTransport(uri, options) {
+        var self = createHttpBaseTransport(uri, options);
         self.connect = function() {
             self.poll(uri + "&when=open", function(data) {
                 var query = util.parseURI(data).query;
@@ -999,16 +994,16 @@
             });
         };
         return self;
-    };
-    // Long polling - AJAX
-    transports.longpollajax = function(uri, options) {
+    }
+
+    function createHttpLongpollAjaxTransport(uri, options) {
         if (util.crossOrigin(uri) && !util.corsable) {
             return;
         }
         var xhr;
-        var self = transports.longpollbase(uri, options);
+        var self = createHttpLongpollBaseTransport(uri, options);
         self.poll = function(url, fn) {
-            xhr = util.xhr();
+            xhr = util.createXMLHttpRequest();
             xhr.onreadystatechange = function() {
                 // Avoids c00c023f error on Internet Explorer 9
                 if (xhr.readyState === 4) {
@@ -1029,15 +1024,15 @@
             xhr.abort();
         };
         return self;
-    };
-    // Long polling - XDomainRequest
-    transports.longpollxdr = function(uri, options) {
+    }
+
+    function createHttpLongpollXdrTransport(uri, options) {
         var XDomainRequest = window.XDomainRequest;
         if (!XDomainRequest || !options.xdrURL) {
             return;
         }
         var xdr;
-        var self = transports.longpollbase(uri, options);
+        var self = createHttpLongpollBaseTransport(uri, options);
         self.poll = function(url, fn) {
             url = options.xdrURL.call(self, url);
             xdr = new XDomainRequest();
@@ -1054,12 +1049,12 @@
             xdr.abort();
         };
         return self;
-    };
-    // Long polling - JSONP
+    }
+
     var jsonpCallbacks = [];
-    transports.longpolljsonp = function(uri, options) {
+    function createHttpLongpollJsonpTransport(uri, options) {
         var script;
-        var self = transports.longpollbase(uri, options);
+        var self = createHttpLongpollBaseTransport(uri, options);
         var callback = jsonpCallbacks.pop() || ("socket_" + (guid++));
         // Attaches callback
         window[callback] = function(data) {
@@ -1102,22 +1097,10 @@
             }
         };
         return self;
-    };
+    }
     
-    // Defines the vibe
-    var vibe = {};
     // Socket instances
     var sockets = [];
-    // Creates a new socket and connects to the given URI
-    vibe.open = function(uris, options) {
-        // Opens a new socket
-        var socket = Socket(uris, options);
-        sockets.push(socket);
-        return socket; 
-    };
-    // Exposes to help debug or apply hotfix but not public
-    vibe.util = util;
-    vibe.transports = transports;
     // For browser environment
     util.on(window, "unload", function() {
         var socket;
@@ -1149,5 +1132,26 @@
             }
         }
     });
-    return vibe;
+    
+    // Defines the module
+    return {
+        // Creates a socket and connects to the server
+        open: function(uris, options) {
+            // Opens a new socket
+            var socket = createSocket(uris, options);
+            sockets.push(socket);
+            return socket;
+        },
+        // Defines the transport module
+        transport: {
+            // Creates a WebSocket transport
+            createWebSocketTransport: createWebSocketTransport, 
+            // Creates a HTTP streaming transport
+            createHttpStreamTransport: createHttpStreamTransport, 
+            // Creates a HTTP long polling transport
+            createHttpLongpollTransport: createHttpLongpollTransport
+        },
+        // To help debug or apply hotfix only
+        util: util
+    };
 }));
