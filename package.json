@@ -28,8 +28,8 @@
     "url": "https://github.com/vibe-project/vibe-javascript-client/issues"
   },
   "dependencies": {
-    "jsdom": "2.0.0",
-    "ws": "0.6.5",
+    "jsdom": "3.0.2",
+    "ws": "0.7.0",
     "eventsource": "0.1.4"
   },
   "devDependencies": {
@@ -37,7 +37,7 @@
     "grunt": "0.4.5",
     "mocha": "2.1.0",
     "chai": "1.10.0",
-    "grunt-saucelabs": "8.3.3",
+    "grunt-saucelabs": "8.5.0",
     "minimist": "1.1.0"
   }
 }
