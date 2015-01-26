@@ -590,6 +590,8 @@
     }
 
     function createBaseTransport(uri, options) {
+        // TODO improve
+        options = options || {timeout: 3000};
         var self = {};
         self.open = function() {
             // Establishes a real connection
