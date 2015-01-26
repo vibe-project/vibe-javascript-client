@@ -290,16 +290,12 @@
     
     // Socket object
     function createSocket(uris, options) {
-        // Default options
+        // Default socket options
         var defaults = {
-            // For socket
             reconnect: function(lastDelay) {
                 return 2 * (lastDelay || 250);
             },
-            transports: [createWebSocketTransport, createHttpStreamTransport, createHttpLongpollTransport],
-            // For transport
-            timeout: 3000,
-            xdrURL: null
+            transports: [createWebSocketTransport, createHttpStreamTransport, createHttpLongpollTransport]
         };
         // Overrides defaults
         if (options) {
@@ -590,8 +586,20 @@
     }
 
     function createBaseTransport(uri, options) {
-        // TODO improve
-        options = options || {timeout: 3000};
+        // Default transport options
+        var defaults = {
+            timeout: 3000,
+            xdrURL: null
+        };
+        // Overrides defaults
+        if (options) {
+            for (var i in options) {
+                defaults[i] = options[i];
+            }
+        }
+        options = defaults;
+
+        // Transport
         var self = {};
         self.open = function() {
             // Establishes a real connection
