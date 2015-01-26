@@ -649,9 +649,11 @@
         };
         self.send = function(data) {
             ws.send(data);
+            return this;
         };
         self.close = function() {
             ws.close();
+            return this;
         };
         return self;
     }
@@ -687,6 +689,7 @@
                 xhr.withCredentials = true;
             }
             xhr.send("data=" + data);
+            return this;
         } : window.XDomainRequest && options.xdrURL ?
         // By XDomainRequest
         function(data) {
@@ -698,6 +701,7 @@
             };
             xdr.open("POST", options.xdrURL.call(self, sendURI));
             xdr.send("data=" + data);
+            return this;
         } :
         // By HTMLFormElement
         function(data) {
@@ -723,6 +727,7 @@
             });
             document.body.appendChild(form);
             form.submit();
+            return this;
         };
         // To notify server only once
         var latch;
@@ -748,6 +753,7 @@
                 };
                 head.insertBefore(script, head.firstChild);
             }
+            return this;
         };
         return self;
     }
