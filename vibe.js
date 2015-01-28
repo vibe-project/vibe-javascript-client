@@ -586,20 +586,7 @@
     }
 
     function createBaseTransport(uri, options) {
-        // Default transport options
-        var defaults = {
-            timeout: 3000,
-            xdrURL: null
-        };
-        // Overrides defaults
-        if (options) {
-            for (var i in options) {
-                defaults[i] = options[i];
-            }
-        }
-        options = defaults;
-
-        // Transport
+        var timeout = options && options.timeout || 3000;
         var self = {};
         self.open = function() {
             // Establishes a real connection
@@ -607,7 +594,7 @@
             // Sets a timeout timer and clear it on open or close event
             var timeoutTimer = setTimeout(function() {
                 self.fire("error", new Error("timeout")).close();
-            }, options.timeout);
+            }, timeout);
             function clearTimeoutTimer() {
                 clearTimeout(timeoutTimer);
             }
@@ -667,6 +654,7 @@
     }
 
     function createHttpBaseTransport(uri, options) {
+        var xdrURL = options && options.xdrURL;
         var self = createBaseTransport(uri, options);
         // Because id is set on open event
         var sendURI;
@@ -698,7 +686,7 @@
             }
             xhr.send("data=" + data);
             return this;
-        } : window.XDomainRequest && options.xdrURL ?
+        } : window.XDomainRequest && xdrURL ?
         // By XDomainRequest
         function(data) {
             // Only text/plain is supported for the request's Content-Type header
@@ -707,7 +695,7 @@
             xdr.onerror = function() {
                 retry(data);
             };
-            xdr.open("POST", options.xdrURL.call(self, sendURI));
+            xdr.open("POST", xdrURL.call(self, sendURI));
             xdr.send("data=" + data);
             return this;
         } :
@@ -870,8 +858,9 @@
     }
 
     function createHttpStreamXdrTransport(uri, options) {
+        var xdrURL = options && options.xdrURL;
         var XDomainRequest = window.XDomainRequest;
-        if (!XDomainRequest || !options.xdrURL) {
+        if (!xdrURL || !XDomainRequest) {
             return;
         }
         var xdr;
@@ -889,7 +878,7 @@
             xdr.onload = function() {
                 self.fire("close");
             };
-            xdr.open("GET", options.xdrURL.call(self, uri + "&when=open"));
+            xdr.open("GET", xdrURL.call(self, uri + "&when=open"));
             xdr.send();
         };
         self.abort = function() {
@@ -1036,14 +1025,15 @@
     }
 
     function createHttpLongpollXdrTransport(uri, options) {
+        var xdrURL = options && options.xdrURL;
         var XDomainRequest = window.XDomainRequest;
-        if (!XDomainRequest || !options.xdrURL) {
+        if (!xdrURL || !XDomainRequest) {
             return;
         }
         var xdr;
         var self = createHttpLongpollBaseTransport(uri, options);
         self.poll = function(url, fn) {
-            url = options.xdrURL.call(self, url);
+            url = xdrURL.call(self, url);
             xdr = new XDomainRequest();
             xdr.onload = function() {
                 fn(xdr.responseText);
