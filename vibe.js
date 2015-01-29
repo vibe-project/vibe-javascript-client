@@ -602,7 +602,7 @@
             return this;
         };
         // Transport events
-        var events = {open: createCallbacks(true), text: createCallbacks(), error: createCallbacks(), close: createCallbacks(true)};
+        var events = {open: createCallbacks(true), text: createCallbacks(), binary: createCallbacks(), error: createCallbacks(), close: createCallbacks(true)};
         self.on = function(type, fn) {
             events[type].add(fn);
             return this;
@@ -627,12 +627,16 @@
         var self = createBaseTransport(uri, options);
         self.connect = function() {
             ws = new WebSocket(uri);
+            ws.binaryType = "arraybuffer";
             ws.onopen = function() {
                 self.fire("open");
             };
             ws.onmessage = function(event) {
                 if (typeof event.data === "string") {
                     self.fire("text", event.data);
+                } else {
+                    // event.data is ArrayBuffer in browser and Buffer in Node
+                    self.fire("binary", event.data);
                 }
             };
             ws.onerror = function() {
