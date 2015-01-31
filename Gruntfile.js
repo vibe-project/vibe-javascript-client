@@ -231,7 +231,6 @@ module.exports = function(grunt) {
                     delete urlObj.search;
                     urlObj.query.session = session.id;
                     query.uri = url.format(urlObj);
-                    console.log(query.uri);
                     res.end("connect(" + JSON.stringify(JSON.stringify(query)) + ")");
                 });
                 break;
