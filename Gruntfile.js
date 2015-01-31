@@ -224,8 +224,14 @@ module.exports = function(grunt) {
                 res.end();
                 var session = sessions.find(query.session);
                 session.get(function(res) {
+                    var urlObj = url.parse(query.uri, true);
                     // Sauce prefers 127.0.0.1 to localhost for some reason
-                    query.uri = query.uri.replace("localhost", "127.0.0.1") + "?session=" + session.id;
+                    delete urlObj.host;
+                    urlObj.hostname = "127.0.0.1";
+                    delete urlObj.search;
+                    urlObj.query.session = session.id;
+                    query.uri = url.format(urlObj);
+                    console.log(query.uri);
                     res.end("connect(" + JSON.stringify(JSON.stringify(query)) + ")");
                 });
                 break;
