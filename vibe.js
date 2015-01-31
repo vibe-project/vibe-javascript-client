@@ -1022,25 +1022,12 @@
             xhr.onreadystatechange = function() {
                 switch (xhr.readyState) {
                 // HEADERS_RECEIVED
+                // To set xhr.responseType which can't be set on LOADING and DONE state
                 case 2:
-                    // To avoid error of Internet Explorer 6 occured when setting custom attribute to xhr
-                    // In a browser implementing XMLHttpRequest 2, util.corsable is always true
-                    if (util.corsable) {
-                        switch ((xhr.getResponseHeader("content-type") || "").toLowerCase()) {
-                        case "text/plain; charset=utf-8":
-                        case "text/plain; charset=utf8":
-                        case "text/plain;charset=utf-8":
-                        case "text/plain;charset=utf8":
-                            // Empty responseType equals to one whose value is text
-                            break;
-                        case "application/octet-stream":
-                            // Reads response body as ArrayBuffer
-                            xhr.responseType = "arraybuffer";
-                            break;
-                        default:
-                            self.fire("error", new Error()).fire("close");
-                            break;
-                        }
+                    // No need to make the header value lowercase because it is case sensitive unless there is a charset
+                    if (xhr.getResponseHeader("content-type") === "application/octet-stream") {
+                        // Reads response body as ArrayBuffer as it's binary
+                        xhr.responseType = "arraybuffer";
                     }
                     break;
                 // DONE
