@@ -627,6 +627,7 @@
         var self = createBaseTransport(uri, options);
         self.connect = function() {
             ws = new WebSocket(uri);
+            // Reads binary frame as ArrayBuffer
             ws.binaryType = "arraybuffer";
             ws.onopen = function() {
                 self.fire("open");
@@ -684,11 +685,18 @@
                 }
             };
             xhr.open("POST", sendURI);
-            xhr.setRequestHeader("content-type", "text/plain; charset=UTF-8");
             if (util.corsable) {
                 xhr.withCredentials = true;
             }
-            xhr.send("data=" + data);
+            // data is either a string or an ArrayBuffer
+            if (typeof data === "string") {
+                xhr.setRequestHeader("content-type", "text/plain; charset=UTF-8");
+                xhr.send("data=" + data);
+            } else {
+                // ArrayBuffer can be sent by only XMLHttpRequest 2
+                xhr.setRequestHeader("content-type", "application/octet-stream");
+                xhr.send(data);
+            }
             return this;
         } : window.XDomainRequest && xdrURL ?
         // By XDomainRequest
@@ -986,7 +994,12 @@
                     self.poll(util.stringifyURI(uri, {id: self.id, when: "poll"}), function(data) {
                         if (data) {
                             poll();
-                            self.fire("text", data);
+                            if (typeof data === "string") {
+                                self.fire("text", data);
+                            } else {
+                                // Practically this case only happens with XMLHttpRequest 2
+                                self.fire("binary", data);
+                            }
                         } else {
                             self.fire("close");
                         }
@@ -1007,13 +1020,39 @@
         self.poll = function(url, fn) {
             xhr = util.createXMLHttpRequest();
             xhr.onreadystatechange = function() {
-                // Avoids c00c023f error on Internet Explorer 9
-                if (xhr.readyState === 4) {
+                switch (xhr.readyState) {
+                // HEADERS_RECEIVED
+                case 2:
+                    // To avoid error of Internet Explorer 6 occured when setting custom attribute to xhr
+                    // In a browser implementing XMLHttpRequest 2, util.corsable is always true
+                    if (util.corsable) {
+                        switch ((xhr.getResponseHeader("content-type") || "").toLowerCase()) {
+                        case "text/plain; charset=utf-8":
+                        case "text/plain; charset=utf8":
+                        case "text/plain;charset=utf-8":
+                        case "text/plain;charset=utf8":
+                            // Empty responseType equals to one whose value is text
+                            break;
+                        case "application/octet-stream":
+                            // Reads response body as ArrayBuffer
+                            xhr.responseType = "arraybuffer";
+                            break;
+                        default:
+                            self.fire("error", new Error()).fire("close");
+                            break;
+                        }
+                    }
+                    break;
+                // DONE
+                // To avoid c00c023f error on Internet Explorer 9
+                case 4:
                     if (xhr.status === 200) {
-                        fn(xhr.responseText);
+                        // xhr.response follows the type specified by xhr.responseType
+                        fn(xhr.response || xhr.responseText);
                     } else {
                         self.fire("error", new Error());
                     }
+                    break;
                 }
             };
             xhr.open("GET", url);
