@@ -54,8 +54,8 @@
         var div = document.createElement("div");
         // Uses an innerHTML property to obtain an absolute URL
         div.innerHTML = '<a href="' + url + '"/>';
-        // encodeURI and decodeURI are needed to normalize URL between Internet Explorer and non-Internet Explorer,
-        // since Internet Explorer doesn't encode the href property value and return it - http://jsfiddle.net/Yq9M8/1/
+        // encodeURI and decodeURI are needed to normalize URL between IE and non-IE,
+        // since IE doesn't encode the href property value and return it - http://jsfiddle.net/Yq9M8/1/
         return encodeURI(decodeURI(div.firstChild.href));
     };
     util.on = function(elem, type, fn) {
@@ -200,7 +200,7 @@
         browser[match[1] || ""] = true;
         browser.version = match[2] || "0";
         browser.vmajor = browser.version.split(".")[0];
-        // Trident is the layout engine of the Internet Explorer
+        // Trident is the layout engine of IE
         if (browser.trident) {
             browser.msie = true;
         }
@@ -686,7 +686,7 @@
             };
             xhr.open("POST", sendURI);
             // Checks if XMLHttpRequest handles withCredentials
-            // to avoid an error of Internet Explorer 6 occuring when custom attribute is set to XMLHttpRequest
+            // to avoid an error of IE 6 occuring when custom attribute is set to XMLHttpRequest
             if (util.corsable) {
                 xhr.withCredentials = true;
             }
@@ -721,7 +721,7 @@
             form.action = sendURI;
             form.target = "socket-" + (guid++);
             form.method = "POST";
-            // Internet Explorer 6 needs encoding property
+            // IE 6 needs encoding property
             form.enctype = form.encoding = "text/plain";
             form.acceptCharset = "UTF-8";
             form.style.display = "none";
@@ -947,8 +947,8 @@
                 }
                 function readDirty() {
                     var clone = container.cloneNode(true);
-                    // Adds a character not CR and LF to circumvent an Internet Explorer bug
-                    // If the contents of an element ends with one or more CR or LF, Internet Explorer ignores them in the innerText property
+                    // Adds a character not CR and LF to circumvent an IE bug
+                    // If the contents of an element ends with one or more CR or LF, IE ignores them in the innerText property
                     clone.appendChild(cdoc.createTextNode("."));
                     // But the above idea causes \n chars to be replaced with \r\n or for some reason
                     // Restores them to its original state
@@ -1033,7 +1033,7 @@
                     }
                     break;
                 // DONE
-                // To avoid c00c023f error on Internet Explorer 9
+                // To avoid c00c023f error on IE 9
                 case 4:
                     if (xhr.status === 200) {
                         // xhr.response follows the type specified by xhr.responseType
