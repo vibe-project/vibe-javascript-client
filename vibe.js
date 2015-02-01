@@ -432,7 +432,9 @@
                 var uri = candidates.shift();
                 // If every available transport failed
                 if (!uri) {
-                    self.fire("error", new Error()).fire("close");
+                    self.fire("error", new Error())
+                    // Fires the close event instead of executing close method which destorys the socket
+                    .fire("close");
                     return;
                 }
                 // Deremines a transport from URI through transports option
@@ -488,6 +490,7 @@
                         self.fire.apply(self, args);
                     })
                     .on("error", function(error) {
+                        // If the underlying connection is closed due to this error, accordingly close event will be triggered
                         self.fire("error", error);
                     })
                     .on("close", function() {
@@ -510,10 +513,11 @@
                         clearTimeout(heartbeatTimer);
                         setHeartbeatTimer();
                     });
-                    // transport will be closed after options._heartbeat ms
-                    // unless the server responds it
+                    // transport will be closed after options._heartbeat ms unless the server responds it
                     heartbeatTimer = setTimeout(function() {
                         self.fire("error", new Error("heartbeat"));
+                        // Now that the transport doesn't realize its connection is closed, execute close method
+                        // It will also fire close event to transport and accordingly socket
                         transport.close();
                     }, options._heartbeat);
                 }, options.heartbeat - options._heartbeat);
@@ -593,7 +597,9 @@
             self.connect();
             // Sets a timeout timer and clear it on open or close event
             var timeoutTimer = setTimeout(function() {
-                self.fire("error", new Error("timeout")).close();
+                self.fire("error", new Error("timeout"))
+                // To abort connection
+                .close();
             }, timeout);
             function clearTimeoutTimer() {
                 clearTimeout(timeoutTimer);
@@ -647,6 +653,7 @@
                 }
             };
             ws.onerror = function() {
+                // In some browsers, if onerror is called, onclose is not called.
                 self.fire("error", new Error()).fire("close");
             };
             ws.onclose = function() {
@@ -863,6 +870,7 @@
                     index = xhr.responseText.length;
                 } else if (xhr.readyState === 4) {
                     if (xhr.status !== 200) {
+                        // Here the connection is already closed
                         self.fire("error", new Error());
                     }
                     self.fire("close");
@@ -896,6 +904,8 @@
                 index = xdr.responseText.length;
             };
             xdr.onerror = function() {
+                // Here the connection is already closed
+                // But onload isn't executed if onerror is executed so fires close event
                 self.fire("error", new Error()).fire("close");
             };
             xdr.onload = function() {
@@ -1050,7 +1060,8 @@
                         // xhr.response follows the type specified by xhr.responseType
                         fn(xhr.response || xhr.responseText);
                     } else {
-                        self.fire("error", new Error());
+                        // Here is the end of the connection due to error
+                        self.fire("error", new Error()).fire("close");
                     }
                     break;
                 }
@@ -1082,6 +1093,8 @@
                 fn(xdr.responseText);
             };
             xdr.onerror = function() {
+                // Since if onerror is called, onload is not called, 
+                // fn which triggers poll request is also not called and the connection ends here
                 self.fire("error", new Error()).fire("close");
             };
             xdr.open("GET", url);
@@ -1170,6 +1183,7 @@
             socket = sockets[i];
             // Fires a close event immediately
             if (socket.state() === "opened") {
+                // The underlying transport will detect disconnection and fire close event after a few seconds
                 socket.fire("error", new Error()).fire("close");
             }
         }
