@@ -685,6 +685,8 @@
                 }
             };
             xhr.open("POST", sendURI);
+            // Checks if XMLHttpRequest handles withCredentials
+            // to avoid an error of Internet Explorer 6 occuring when custom attribute is set to XMLHttpRequest
             if (util.corsable) {
                 xhr.withCredentials = true;
             }
