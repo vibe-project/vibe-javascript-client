@@ -1107,6 +1107,7 @@
     }
 
     var jsonpCallbacks = [];
+    // Only for IE 6, 7, 8 and 9
     function createHttpLongpollJsonpTransport(uri, options) {
         var script;
         var self = createHttpLongpollBaseTransport(uri, options);
@@ -1127,19 +1128,24 @@
             script.src = util.stringifyURI(url, {jsonp: "true", callback: callback});
             script.clean = function() {
                 // Assigns null to attributes to avoid memory leak in IE
-                script.clean = script.onerror = script.onload = script.onreadystatechange = script.responseText = null;
+                script.clean = script.onerror = script.onreadystatechange = script.responseText = null;
                 if (script.parentNode) {
                     script.parentNode.removeChild(script);
                 }
             };
-            script.onload = script.onreadystatechange = function() {
-                if (!script.readyState || /loaded|complete/.test(script.readyState)) {
+            // onreadystatechange is supported in IE 6+
+            script.onreadystatechange = function() {
+                if (/loaded|complete/.test(script.readyState)) {
                     if (script.clean) {
                         script.clean();
                     }
                     fn(script.responseText);
+                    // If the callback function is not called, the previous data would be passed to fn again
+                    // To prevent it, makes it null
+                    script.responseText = null;
                 }
             };
+            // onerror is supported in IE 9+
             script.onerror = function() {
                 script.clean();
                 self.fire("error", new Error()).fire("close");
