@@ -602,7 +602,13 @@
             return this;
         };
         // Transport events
-        var events = {open: createCallbacks(true), text: createCallbacks(), binary: createCallbacks(), error: createCallbacks(), close: createCallbacks(true)};
+        var events = {
+            open: createCallbacks(true), 
+            text: createCallbacks(), 
+            binary: createCallbacks(), 
+            error: createCallbacks(), 
+            close: createCallbacks(true)
+        };
         self.on = function(type, fn) {
             events[type].add(fn);
             return this;
@@ -770,7 +776,10 @@
 
     function createHttpStreamTransport(uri, options) {
         if (/^https?:/.test(uri) && util.parseURI(uri).query.transport === "stream") {
-            return createHttpSseTransport(uri, options) || createHttpStreamXhrTransport(uri, options) || createHttpStreamXdrTransport(uri, options) || createHttpStreamIframeTransport(uri, options);
+            return createHttpSseTransport(uri, options) || 
+                createHttpStreamXhrTransport(uri, options) || 
+                createHttpStreamXdrTransport(uri, options) || 
+                createHttpStreamIframeTransport(uri, options);
         }
     }
 
@@ -981,7 +990,9 @@
 
     function createHttpLongpollTransport(uri, options) {
         if (/^https?:/.test(uri) && util.parseURI(uri).query.transport === "longpoll") {
-            return createHttpLongpollAjaxTransport(uri, options) || createHttpLongpollXdrTransport(uri, options) || createHttpLongpollJsonpTransport(uri, options);
+            return createHttpLongpollAjaxTransport(uri, options) || 
+                createHttpLongpollXdrTransport(uri, options) || 
+                createHttpLongpollJsonpTransport(uri, options);
         }
     }
 
