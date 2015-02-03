@@ -28,8 +28,8 @@
     "url": "https://github.com/vibe-project/vibe-javascript-client/issues"
   },
   "dependencies": {
-    "jsdom": "3.0.2",
-    "ws": "0.7.0",
+    "jsdom": "3.1.0",
+    "ws": "0.7.1",
     "eventsource": "0.1.4"
   },
   "devDependencies": {
