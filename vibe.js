@@ -627,6 +627,14 @@
             events[type].fire(self, slice.call(arguments, 1));
             return this;
         };
+        self.on("close", function() {
+            // Locks every event except close event
+            for (var type in events) {
+                if (type !== "close") {
+                    events[type].lock();
+                }
+            }
+        });
         return self;
     }
 
