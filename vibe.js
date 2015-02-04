@@ -831,7 +831,9 @@
                     if (typeof exports === "object") {
                         data = new Buffer(data, "base64");
                     } else {
-                        var decoded =  window.atob(data);
+                        // Decodes Base64 encoded string
+                        var decoded = atob(data);
+                        // And converts it to ArrayBuffer
                         var array = new Uint8Array(data.length);
                         for (var i = 0; i < decoded.length; i++) {
                             array[i] = decoded.charCodeAt(i);
