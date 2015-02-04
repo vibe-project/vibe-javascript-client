@@ -705,11 +705,13 @@
             }
             // data is either a string or an ArrayBuffer
             if (typeof data === "string") {
-                xhr.setRequestHeader("content-type", "text/plain; charset=UTF-8");
+                // In XMLHttpRequest of jsdom used to provide window in Node.js,
+                // request headers are case sensitive and it checks content-type header by 'Content-Type'
+                xhr.setRequestHeader("Content-Type", "text/plain; charset=UTF-8");
                 xhr.send("data=" + data);
             } else {
                 // ArrayBuffer can be sent by only XMLHttpRequest 2
-                xhr.setRequestHeader("content-type", "application/octet-stream");
+                xhr.setRequestHeader("Content-Type", "application/octet-stream");
                 xhr.send(data);
             }
             return this;
@@ -790,44 +792,9 @@
         }
     }
 
-    function createHttpSseTransport(uri, options) {
-        var EventSource = window.EventSource;
-        if (!EventSource || (util.crossOrigin(uri) && util.browser.safari && util.browser.vmajor < 7)) {
-            return;
-        }
-        var es;
-        var self = createHttpBaseTransport(uri, options);
-        self.connect = function() {
-            es = new EventSource(uri + "&when=open&sse=true", {withCredentials: true});
-            var handshaked;
-            es.onmessage = function(event) {
-                // The first message is handshake result
-                if (!handshaked) {
-                    handshaked = true;
-                    var query = util.parseURI(event.data).query;
-                    // Assign a newly issued identifier for this transport
-                    self.id = query.id;
-                    self.fire("open");
-                } else {
-                    self.fire("text", event.data);
-                }
-            };
-            es.onerror = function() {
-                es.close();
-                // There is no way to find whether there was an error or not
-                self.fire("close");
-            };
-        };
-        self.abort = function() {
-            es.close();
-        };
-        return self;
-    }
-
     function createHttpStreamBaseTransport(uri, options) {
         var buffer = "";
         var self = createHttpBaseTransport(uri, options);
-        var handshaked;
         // The detail about parsing is explained in the reference implementation
         self.parse = function(chunk) {
             // Strips off the left padding of the chunk that appears in the
@@ -838,19 +805,67 @@
                 // String.prototype.split with string separator is reliable cross-browser
                 var lines = (buffer + chunk).split("\n\n");
                 for (var i = 0; i < lines.length - 1; i++) {
-                    var data = lines[i].substring("data: ".length);
-                    if (!handshaked) {
-                        handshaked = true;
-                        var query = util.parseURI(data).query;
-                        // Assign a newly issued identifier for this transport
-                        self.id = query.id;
-                        self.fire("open");
-                    } else {
-                        self.fire("text", data);
-                    }
+                    self.onmessage(lines[i].substring("data: ".length));
                 }
                 buffer = lines[lines.length - 1];
             }
+        };
+        var handshaked;
+        self.onmessage = function(data) {
+            // The first message is handshake result
+            if (!handshaked) {
+                handshaked = true;
+                var query = util.parseURI(data).query;
+                // Assign a newly issued identifier for this transport
+                self.id = query.id;
+                self.fire("open");
+            } else {
+                var code = data.substring(0, 1);
+                data = data.substring(1);
+                switch (code) {
+                case "1":
+                    self.fire("text", data);
+                    break;
+                case "2":
+                    // The same condition used in UMD
+                    if (typeof exports === "object") {
+                        data = new Buffer(data, "base64");
+                    } else {
+                        var decoded =  window.atob(data);
+                        var array = new Uint8Array(data.length);
+                        for (var i = 0; i < decoded.length; i++) {
+                            array[i] = decoded.charCodeAt(i);
+                        }
+                        data = array.buffer;
+                    }
+                    self.fire("binary", data);
+                    break;
+                }
+            }
+        };
+        return self;
+    }
+
+    function createHttpSseTransport(uri, options) {
+        var EventSource = window.EventSource;
+        if (!EventSource || (util.crossOrigin(uri) && util.browser.safari && util.browser.vmajor < 7)) {
+            return;
+        }
+        var es;
+        var self = createHttpStreamBaseTransport(uri, options);
+        self.connect = function() {
+            es = new EventSource(uri + "&when=open&sse=true", {withCredentials: true});
+            es.onmessage = function(event) {
+                self.onmessage(event.data);
+            };
+            es.onerror = function() {
+                es.close();
+                // There is no way to find whether there was an error or not
+                self.fire("close");
+            };
+        };
+        self.abort = function() {
+            es.close();
         };
         return self;
     }
