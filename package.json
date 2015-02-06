@@ -1,6 +1,6 @@
 {
   "name": "vibe-client",
-  "version": "3.0.0-Alpha13",
+  "version": "3.0.0-Alpha14",
   "homepage": "http://vibe-project.github.io/projects/vibe-javascript-client/",
   "description": "Vibe client for JavaScript",
   "main": "vibe.js",
