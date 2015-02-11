@@ -690,19 +690,23 @@
         .on("close", function() {
             sendURI = null;
         });
-        // Try again as long as the transport is opened
-        function retry(data) {
+        function onerror() {
+            // Even though it fails to send a message, the connection may turn out to be opened
             if (sendURI) {
-                self.send(data);
+                // However it's likely that the connection was closed but the transport couldn't detect it
+                // Because if the connection is really alive, then sending a message shouldn't have failed
+                // To make it clear, closes the connection
+                self.fire("error", new Error()).close();
             }
         }
+
         self.send = !util.crossOrigin(uri) || util.corsable ?
         // By XMLHttpRequest
         function(data) {
             var xhr = util.createXMLHttpRequest();
             xhr.onreadystatechange = function() {
                 if (xhr.readyState === 4 && xhr.status !== 200) {
-                    retry(data);
+                    onerror();
                 }
             };
             xhr.open("POST", sendURI);
@@ -730,7 +734,7 @@
             // from the fourth at http://blogs.msdn.com/b/ieinternals/archive/2010/05/13/xdomainrequest-restrictions-limitations-and-workarounds.aspx
             var xdr = new window.XDomainRequest();
             xdr.onerror = function() {
-                retry(data);
+                onerror();
             };
             xdr.open("POST", xdrURL.call(self, sendURI));
             xdr.send("data=" + data);
@@ -753,7 +757,7 @@
             textarea.value = data;
             iframe = form.lastChild;
             util.on(iframe, "error", function() {
-                retry(data);
+                onerror();
             });
             util.on(iframe, "load", function() {
                 document.body.removeChild(form);
