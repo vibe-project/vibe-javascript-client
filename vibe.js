@@ -627,7 +627,12 @@
             events[type].fire(self, slice.call(arguments, 1));
             return this;
         };
+        var opened = false;
+        self.on("open", function() {
+            opened = true;
+        });
         self.on("close", function() {
+            opened = false;
             // Locks every event except close event
             for (var type in events) {
                 if (type !== "close") {
@@ -635,6 +640,14 @@
                 }
             }
         });
+        self.send = function(data) {
+            if (opened) {
+                self.write(data);
+            } else {
+                self.emit("error", new Error("notopened"));
+            }
+            return this;
+        };
         return self;
     }
 
@@ -668,9 +681,8 @@
                 self.fire("close");
             };
         };
-        self.send = function(data) {
+        self.write = function(data) {
             ws.send(data);
-            return this;
         };
         self.close = function() {
             ws.close();
@@ -778,7 +790,7 @@
             form.submit();
             return this;
         };
-        self.send = function(data) {
+        self.write = function(data) {
             if (!sending) {
                 sending = true;
                 send(data);
