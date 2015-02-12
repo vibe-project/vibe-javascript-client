@@ -690,7 +690,16 @@
         .on("close", function() {
             sendURI = null;
         });
-        function onerror() {
+        var sending = false;
+        var queue = [];
+        var onload = function() {
+            if (queue.length) {
+                send(queue.shift());
+            } else {
+                sending = false;
+            }
+        };
+        var onerror = function() {
             // Even though it fails to send a message, the connection may turn out to be opened
             if (sendURI) {
                 // However it's likely that the connection was closed but the transport couldn't detect it
@@ -698,15 +707,18 @@
                 // To make it clear, closes the connection
                 self.fire("error", new Error()).close();
             }
-        }
-
-        self.send = !util.crossOrigin(uri) || util.corsable ?
+        };
+        var send = !util.crossOrigin(uri) || util.corsable ?
         // By XMLHttpRequest
         function(data) {
             var xhr = util.createXMLHttpRequest();
             xhr.onreadystatechange = function() {
-                if (xhr.readyState === 4 && xhr.status !== 200) {
-                    onerror();
+                if (xhr.readyState === 4) {
+                    if (xhr.status === 200) {
+                        onload();
+                    } else {
+                        onerror();
+                    }
                 }
             };
             xhr.open("POST", sendURI);
@@ -733,9 +745,8 @@
             // Only text/plain is supported for the request's Content-Type header
             // from the fourth at http://blogs.msdn.com/b/ieinternals/archive/2010/05/13/xdomainrequest-restrictions-limitations-and-workarounds.aspx
             var xdr = new window.XDomainRequest();
-            xdr.onerror = function() {
-                onerror();
-            };
+            xdr.onload = onload;
+            xdr.onerror = onerror;
             xdr.open("POST", xdrURL.call(self, sendURI));
             xdr.send("data=" + data);
             return this;
@@ -761,10 +772,19 @@
             });
             util.on(iframe, "load", function() {
                 document.body.removeChild(form);
+                onload();
             });
             document.body.appendChild(form);
             form.submit();
             return this;
+        };
+        self.send = function(data) {
+            if (!sending) {
+                sending = true;
+                send(data);
+            } else {
+                queue.push(data);
+            }
         };
         // To notify server only once
         var latch;
