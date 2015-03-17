@@ -105,7 +105,7 @@ module.exports = function(grunt) {
             delete require.cache[require.resolve("./node_modules/vibe-protocol/test/client.js")];
             mocha.addFile("./node_modules/vibe-protocol/test/client.js");
             // Set options through process.argv
-            process.argv.push("--vibe.transports", "ws,httpstream,httplongpoll");
+            process.argv.push("--vibe.transports", "websocket,httpstream,httplongpoll");
             mocha.loadFiles();
             // Undo the changes
             process.argv.splice(process.argv.indexOf("--vibe.transports"), 2);

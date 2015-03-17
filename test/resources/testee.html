@@ -123,7 +123,7 @@
                 !browser.opera &&
                 // Sauce Connect 4 doesn't support WebSocket
                 params.runner !== "sauce") {
-                transports.push("ws");
+                transports.push("websocket");
             }
             if (window.EventSource &&
                 // Safari 5-6 don't allow cross-origin sse
